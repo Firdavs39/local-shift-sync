@@ -1,9 +1,9 @@
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Clock, MapPin, Shield, Users } from 'lucide-react';
 import { db } from '@/lib/db';
-import { useEffect, useState } from 'react';
 
 const Welcome = () => {
   const navigate = useNavigate();
