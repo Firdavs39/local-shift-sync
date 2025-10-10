@@ -52,7 +52,7 @@ const Admin = () => {
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Users Management */}
-          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group">
+          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate('/admin/users')}>
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <Users className="w-7 h-7 text-white" />
             </div>
@@ -66,7 +66,7 @@ const Admin = () => {
           </Card>
 
           {/* Sites Management */}
-          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group">
+          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate('/admin/sites')}>
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <MapPin className="w-7 h-7 text-white" />
             </div>
