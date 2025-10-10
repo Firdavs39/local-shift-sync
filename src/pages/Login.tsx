@@ -84,17 +84,6 @@ const Login = () => {
             {loading ? 'Проверка...' : 'Войти'}
           </Button>
         </form>
-
-        <div className="text-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/welcome')}
-            className="text-xs"
-          >
-            Первый запуск?
-          </Button>
-        </div>
       </Card>
     </div>
   );
