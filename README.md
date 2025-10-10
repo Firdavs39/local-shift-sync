@@ -1,73 +1,152 @@
-# Welcome to your Lovable project
+# GeoTime Local
 
-## Project info
+## О проекте
 
-**URL**: https://lovable.dev/projects/4f9f18fc-1853-4622-bafc-7fa57ef96ef7
+**GeoTime Local** — система учёта рабочего времени с геолокацией, работающая полностью офлайн. Все данные хранятся локально в IndexedDB через Dexie, без использования внешних серверов или баз данных.
 
-## How can I edit this code?
+## Основные возможности
 
-There are several ways of editing your application.
+✅ **Офлайн режим** - работает без интернета  
+✅ **Геолокация** - привязка смен к рабочим объектам  
+✅ **Учёт времени** - автоматический расчёт опозданий и отработанных часов  
+✅ **PWA** - устанавливается как приложение  
+✅ **WakeLock** - экран не гаснет во время смены  
+✅ **Два типа пользователей** - администраторы и сотрудники  
+✅ **PIN-авторизация** - простой вход без паролей  
+✅ **До 20 сотрудников** - локальное управление командой
 
-**Use Lovable**
+## Технологии
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/4f9f18fc-1853-4622-bafc-7fa57ef96ef7) and start prompting.
+- **React 18** + **TypeScript**
+- **Vite** - быстрая сборка
+- **Tailwind CSS** - стилизация
+- **Dexie** - IndexedDB обёртка
+- **date-fns** - работа с датами
+- **shadcn/ui** - UI компоненты
+- **Geolocation API** - определение местоположения
+- **WakeLock API** - управление экраном
 
-Changes made via Lovable will be committed automatically to this repo.
+## Структура данных
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+### Users (Пользователи)
+```typescript
+{
+  id: number;
+  fullName: string;
+  role: 'admin' | 'worker';
+  pin: string;
+  active: boolean;
+  createdAt: Date;
+}
 ```
 
-**Edit a file directly in GitHub**
+### Sites (Объекты)
+```typescript
+{
+  id: number;
+  name: string;
+  lat: number;
+  lon: number;
+  radiusM: number;
+  expectedStart: string; // 'HH:mm'
+  expectedEnd: string; // 'HH:mm'
+  tz: string;
+  active: boolean;
+  createdAt: Date;
+}
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Shifts (Смены)
+```typescript
+{
+  id: number;
+  userId: number;
+  siteId: number;
+  startedAt: Date;
+  endedAt?: Date;
+  startLat: number;
+  startLon: number;
+  endLat?: number;
+  endLon?: number;
+  status: 'early' | 'on_time' | 'late' | 'offsite';
+  minutesLate: number;
+  minutesWorked?: number;
+  createdAt: Date;
+}
+```
 
-**Use GitHub Codespaces**
+### Settings (Настройки)
+```typescript
+{
+  id: 'app';
+  maxUsers: number;
+  purgePolicyDays: number;
+}
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Экраны
 
-## What technologies are used for this project?
+- **/welcome** - первый запуск, выбор роли
+- **/login** - вход по PIN-коду
+- **/me** - кабинет сотрудника
+- **/admin** - панель администратора
 
-This project is built with:
+## Установка и запуск
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```bash
+# Установка зависимостей
+npm install
 
-## How can I deploy this project?
+# Запуск dev сервера
+npm run dev
 
-Simply open [Lovable](https://lovable.dev/projects/4f9f18fc-1853-4622-bafc-7fa57ef96ef7) and click on Share -> Publish.
+# Сборка
+npm run build
 
-## Can I connect a custom domain to my Lovable project?
+# Предпросмотр сборки
+npm run preview
+```
 
-Yes, you can!
+## Первый запуск
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+1. Откройте приложение
+2. Выберите "Я администратор"
+3. Запомните сгенерированный PIN-код
+4. Войдите с этим PIN
+5. Создайте объекты и сотрудников в админ-панели
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Использование
+
+### Для сотрудника:
+1. Войти по PIN-коду
+2. Включить WakeLock (опционально)
+3. Нажать "Начать смену" на объекте
+4. По окончании нажать "Закончить смену"
+
+### Для администратора:
+1. Войти по PIN-коду
+2. Управлять пользователями и объектами
+3. Просматривать отчёты и статистику
+4. Настраивать систему
+
+## PWA функции
+
+- Устанавливается как приложение на главный экран
+- Работает полностью офлайн
+- Service Worker кэширует ресурсы
+- WakeLock не даёт экрану погаснуть во время смены
+
+## Безопасность
+
+- Данные хранятся локально на устройстве
+- PIN-коды не передаются никуда
+- Нет внешних запросов
+- Геолокация используется только локально
+
+## Лицензия
+
+MIT
+
+## URL проекта
+
+[https://lovable.dev/projects/4f9f18fc-1853-4622-bafc-7fa57ef96ef7](https://lovable.dev/projects/4f9f18fc-1853-4622-bafc-7fa57ef96ef7)
