@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Clock, Lock } from 'lucide-react';
+import { Clock, Lock, ArrowLeft } from 'lucide-react';
 import { login } from '@/lib/auth';
 import { toast } from 'sonner';
 
@@ -84,6 +84,18 @@ const Login = () => {
             {loading ? 'Проверка...' : 'Войти'}
           </Button>
         </form>
+
+        <div className="text-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/welcome')}
+            className="text-xs"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Назад к выбору роли
+          </Button>
+        </div>
       </Card>
     </div>
   );
