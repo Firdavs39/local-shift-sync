@@ -20,17 +20,8 @@ const Welcome = () => {
   }, [navigate]);
 
   const handleAdminSetup = async () => {
-    // Create default admin user
-    const adminPin = Math.floor(1000 + Math.random() * 9000).toString();
-    await db.users.add({
-      fullName: 'Администратор',
-      role: 'admin',
-      pin: adminPin,
-      active: true,
-      createdAt: new Date(),
-    });
-    
-    alert(`Ваш PIN: ${adminPin}\nСохраните его!`);
+    // Admin with PIN 777 is created automatically on DB init
+    alert(`PIN администратора: 777`);
     navigate('/login');
   };
 

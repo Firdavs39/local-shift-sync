@@ -63,7 +63,7 @@ export class GeoTimeDB extends Dexie {
 
 export const db = new GeoTimeDB();
 
-// Initialize default settings
+// Initialize default settings and admin user
 db.on('ready', async () => {
   const settings = await db.settings.get('app');
   if (!settings) {
@@ -71,6 +71,18 @@ db.on('ready', async () => {
       id: 'app',
       maxUsers: 20,
       purgePolicyDays: 365,
+    });
+  }
+
+  // Create default admin user if none exists
+  const adminExists = await db.users.where('role').equals('admin').count();
+  if (adminExists === 0) {
+    await db.users.add({
+      fullName: 'Администратор',
+      role: 'admin',
+      pin: '777',
+      active: true,
+      createdAt: new Date(),
     });
   }
 });
