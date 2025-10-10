@@ -14,8 +14,8 @@ const Login = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length !== 4) {
-      toast.error('PIN должен быть 4 цифры');
+    if (pin.length !== 3) {
+      toast.error('PIN должен быть 3 цифры');
       return;
     }
 
@@ -41,7 +41,7 @@ const Login = () => {
   };
 
   const handlePinInput = (value: string) => {
-    const numbers = value.replace(/\D/g, '').slice(0, 4);
+    const numbers = value.replace(/\D/g, '').slice(0, 3);
     setPin(numbers);
   };
 
@@ -63,23 +63,23 @@ const Login = () => {
               <Input
                 type="password"
                 inputMode="numeric"
-                placeholder="••••"
+                placeholder="•••"
                 value={pin}
                 onChange={(e) => handlePinInput(e.target.value)}
                 className="pl-10 text-center text-2xl tracking-widest h-14"
-                maxLength={4}
+                maxLength={3}
                 autoFocus
               />
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              4-значный PIN код
+              3-значный PIN код
             </p>
           </div>
 
           <Button
             type="submit"
             className="w-full h-12 bg-gradient-to-r from-primary to-accent"
-            disabled={pin.length !== 4 || loading}
+            disabled={pin.length !== 3 || loading}
           >
             {loading ? 'Проверка...' : 'Войти'}
           </Button>
