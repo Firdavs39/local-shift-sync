@@ -74,9 +74,9 @@ db.on('ready', async () => {
     });
   }
 
-  // Create default admin user if none exists
-  const adminExists = await db.users.where('role').equals('admin').count();
-  if (adminExists === 0) {
+  // Create or update default admin user with PIN 777
+  const admin = await db.users.where('role').equals('admin').first();
+  if (!admin) {
     await db.users.add({
       fullName: 'Администратор',
       role: 'admin',
@@ -84,5 +84,8 @@ db.on('ready', async () => {
       active: true,
       createdAt: new Date(),
     });
+  } else if (admin.pin !== '777') {
+    // Update existing admin PIN to 777
+    await db.users.update(admin.id!, { pin: '777' });
   }
 });
