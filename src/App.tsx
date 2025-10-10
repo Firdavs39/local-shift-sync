@@ -1,4 +1,5 @@
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import React from "react";
+import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -12,11 +13,11 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => {
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Sonner />
       <BrowserRouter>
+        <Toaster />
         <Routes>
           <Route path="/" element={<Navigate to="/welcome" replace />} />
           <Route path="/welcome" element={<Welcome />} />
@@ -41,12 +42,11 @@ const App = () => {
               <UsersManagement />
             </ProtectedRoute>
           } />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
   );
-};
+}
 
 export default App;
