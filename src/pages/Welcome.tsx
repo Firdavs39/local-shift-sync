@@ -14,18 +14,15 @@ const Welcome = () => {
     db.users.count().then(count => {
       if (count > 0) {
         setIsFirstLaunch(false);
-        navigate('/login');
       }
     });
-  }, [navigate]);
+  }, []);
 
   const handleAdminSetup = async () => {
     // Admin with PIN 777 is created automatically on DB init
     alert(`PIN администратора: 777`);
     navigate('/login');
   };
-
-  if (!isFirstLaunch) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center p-4">
