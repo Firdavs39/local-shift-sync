@@ -10,6 +10,7 @@ import SitesManagement from "./pages/SitesManagement";
 import UsersManagement from "./pages/UsersManagement";
 import Reports from "./pages/Reports";
 import WorkerDetails from "./pages/WorkerDetails";
+import MyShifts from "./pages/MyShifts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,11 @@ function App() {
           <Route path="/me" element={
             <ProtectedRoute>
               <Me />
+            </ProtectedRoute>
+          } />
+          <Route path="/me/shifts" element={
+            <ProtectedRoute>
+              <MyShifts />
             </ProtectedRoute>
           } />
           <Route path="/admin" element={

@@ -50,3 +50,12 @@ export function getShiftStatus(
 export function calculateMinutesWorked(start: Date, end: Date): number {
   return differenceInMinutes(end, start);
 }
+
+export function calculateEarlyMinutes(startedAt: Date, expectedStart: string): number {
+  const { hours, minutes } = parseTime(expectedStart);
+  const expected = new Date(startedAt);
+  expected.setHours(hours, minutes, 0, 0);
+  
+  const diff = differenceInMinutes(expected, startedAt);
+  return diff > 0 ? diff : 0;
+}

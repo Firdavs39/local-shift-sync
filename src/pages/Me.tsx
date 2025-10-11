@@ -6,7 +6,7 @@ import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, isWithinRadius, getDistance } from '@/lib/geo';
 import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked } from '@/lib/time';
-import { Clock, MapPin, LogOut, Play, Square, Smartphone } from 'lucide-react';
+import { Clock, MapPin, LogOut, Play, Square, Smartphone, History } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Site {
@@ -406,6 +406,17 @@ const Me = () => {
           <div className="text-4xl font-bold mb-2">{formatTime(currentTime)}</div>
           <div className="text-muted-foreground">{formatDate(currentTime)}</div>
         </Card>
+
+        {/* My Shifts Button */}
+        <Button
+          onClick={() => navigate('/me/shifts')}
+          className="w-full"
+          variant="outline"
+          size="lg"
+        >
+          <History className="w-5 h-5 mr-2" />
+          Мои смены
+        </Button>
 
         {/* Shift Control */}
         {activeShift ? (
