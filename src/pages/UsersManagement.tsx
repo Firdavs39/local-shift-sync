@@ -16,16 +16,25 @@ interface UserProfile {
   role?: 'admin' | 'worker';
 }
 
+interface EditFormData {
+  userId: string;
+  fullName: string;
+  pin: string;
+  role: 'admin' | 'worker';
+}
+
 const UsersManagement = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editMode, setEditMode] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     pin: '',
     role: 'worker' as 'worker' | 'admin'
   });
+  const [editData, setEditData] = useState<EditFormData | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -210,6 +219,67 @@ const UsersManagement = () => {
     }
   };
 
+  const startEdit = (user: UserProfile) => {
+    setEditData({
+      userId: user.id,
+      fullName: user.full_name,
+      pin: user.pin,
+      role: user.role || 'worker'
+    });
+    setEditMode(user.id);
+  };
+
+  const cancelEdit = () => {
+    setEditData(null);
+    setEditMode(null);
+  };
+
+  const handleUpdate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editData) return;
+
+    if (editData.pin.length !== 3) {
+      toast.error('PIN должен быть 3 цифры');
+      return;
+    }
+
+    if (!editData.fullName.trim()) {
+      toast.error('Введите имя пользователя');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Update profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editData.fullName.trim(),
+          pin: editData.pin
+        })
+        .eq('id', editData.userId);
+
+      if (profileError) throw profileError;
+
+      // Update role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .update({ role: editData.role })
+        .eq('user_id', editData.userId);
+
+      if (roleError) throw roleError;
+
+      toast.success('Данные обновлены');
+      cancelEdit();
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      toast.error(`Ошибка обновления: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5">
       <header className="bg-card border-b">
@@ -303,45 +373,116 @@ const UsersManagement = () => {
         <div className="space-y-4">
           {users.map((user) => (
             <Card key={user.id} className={`p-6 ${!user.active ? 'opacity-50' : ''}`}>
-              <div className="flex items-start justify-between">
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold">
-                      {user.full_name[0]}
+              {editMode === user.id && editData ? (
+                <form onSubmit={handleUpdate} className="space-y-4">
+                  <div>
+                    <Label>Полное имя</Label>
+                    <Input
+                      value={editData.fullName}
+                      onChange={(e) => setEditData({ ...editData, fullName: e.target.value })}
+                      placeholder="Иванов Иван"
+                      required
+                      maxLength={100}
+                    />
+                  </div>
+
+                  <div>
+                    <Label>PIN-код (3 цифры)</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={editData.pin}
+                        onChange={(e) => {
+                          const numbers = e.target.value.replace(/\D/g, '').slice(0, 3);
+                          setEditData({ ...editData, pin: numbers });
+                        }}
+                        placeholder="•••"
+                        className="pl-10 text-center tracking-widest"
+                        maxLength={3}
+                        required
+                      />
                     </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">{user.full_name}</h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          user.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
-                        }`}>
-                          {user.role === 'admin' ? 'Администратор' : 'Сотрудник'}
-                        </span>
-                        <span>PIN: •••</span>
+                  </div>
+
+                  <div>
+                    <Label>Роль</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        type="button"
+                        variant={editData.role === 'worker' ? 'default' : 'outline'}
+                        onClick={() => setEditData({ ...editData, role: 'worker' })}
+                      >
+                        Сотрудник
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={editData.role === 'admin' ? 'default' : 'outline'}
+                        onClick={() => setEditData({ ...editData, role: 'admin' })}
+                      >
+                        Администратор
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button type="submit" className="flex-1" disabled={loading}>
+                      {loading ? 'Сохранение...' : 'Сохранить'}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={cancelEdit}>
+                      Отмена
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold">
+                        {user.full_name[0]}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">{user.full_name}</h3>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            user.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'
+                          }`}>
+                            {user.role === 'admin' ? 'Администратор' : 'Сотрудник'}
+                          </span>
+                          <span>PIN: •••</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant={user.active ? 'outline' : 'default'}
-                    size="sm"
-                    onClick={() => handleToggleActive(user)}
-                  >
-                    {user.active ? 'Деактивировать' : 'Активировать'}
-                  </Button>
-                  {user.pin !== '777' && (
+                  <div className="flex gap-2">
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(user.id)}
-                      className="text-destructive hover:text-destructive"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startEdit(user)}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      Редактировать
                     </Button>
-                  )}
+                    <Button
+                      variant={user.active ? 'outline' : 'default'}
+                      size="sm"
+                      onClick={() => handleToggleActive(user)}
+                    >
+                      {user.active ? 'Деактивировать' : 'Активировать'}
+                    </Button>
+                    {user.pin !== '777' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(user.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </Card>
           ))}
 
