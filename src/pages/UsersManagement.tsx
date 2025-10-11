@@ -107,7 +107,14 @@ const UsersManagement = () => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      if (data && data.error) {
+        throw new Error(data.error);
+      }
 
       toast.success('Пользователь создан');
       setShowForm(false);
@@ -119,10 +126,16 @@ const UsersManagement = () => {
       loadUsers();
     } catch (error: any) {
       console.error('Error creating user:', error);
-      if (error.message?.includes('PIN already exists')) {
-        toast.error('Этот PIN уже используется');
+      const errorMessage = error.message || String(error);
+      
+      if (errorMessage.includes('PIN already exists')) {
+        toast.error('Этот PIN уже используется другим пользователем');
+      } else if (errorMessage.includes('PIN must be')) {
+        toast.error('PIN должен состоять из 3 цифр');
+      } else if (errorMessage.includes('Missing required fields')) {
+        toast.error('Заполните все обязательные поля');
       } else {
-        toast.error('Ошибка создания пользователя: ' + (error.message || 'Попробуйте снова'));
+        toast.error(`Ошибка создания пользователя: ${errorMessage}`);
       }
     } finally {
       setLoading(false);
