@@ -14,16 +14,186 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          active: boolean
+          created_at: string
+          full_name: string
+          id: string
+          pin: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          full_name: string
+          id: string
+          pin: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          full_name?: string
+          id?: string
+          pin?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          id: string
+          max_users: number
+          purge_policy_days: number
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          max_users?: number
+          purge_policy_days?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          max_users?: number
+          purge_policy_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      shifts: {
+        Row: {
+          created_at: string
+          end_lat: number | null
+          end_lon: number | null
+          ended_at: string | null
+          id: string
+          minutes_late: number
+          minutes_worked: number | null
+          site_id: string
+          start_lat: number
+          start_lon: number
+          started_at: string
+          status: Database["public"]["Enums"]["shift_status"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_lat?: number | null
+          end_lon?: number | null
+          ended_at?: string | null
+          id?: string
+          minutes_late?: number
+          minutes_worked?: number | null
+          site_id: string
+          start_lat: number
+          start_lon: number
+          started_at: string
+          status: Database["public"]["Enums"]["shift_status"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_lat?: number | null
+          end_lon?: number | null
+          ended_at?: string | null
+          id?: string
+          minutes_late?: number
+          minutes_worked?: number | null
+          site_id?: string
+          start_lat?: number
+          start_lon?: number
+          started_at?: string
+          status?: Database["public"]["Enums"]["shift_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shifts_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sites: {
+        Row: {
+          active: boolean
+          created_at: string
+          expected_end: string
+          expected_start: string
+          id: string
+          lat: number
+          lon: number
+          name: string
+          radius_m: number
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          expected_end: string
+          expected_start: string
+          id?: string
+          lat: number
+          lon: number
+          name: string
+          radius_m: number
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          expected_end?: string
+          expected_start?: string
+          id?: string
+          lat?: number
+          lon?: number
+          name?: string
+          radius_m?: number
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "worker"
+      shift_status: "early" | "on_time" | "late" | "offsite"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +320,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "worker"],
+      shift_status: ["early", "on_time", "late", "offsite"],
+    },
   },
 } as const
