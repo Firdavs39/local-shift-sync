@@ -112,7 +112,7 @@ const Auth = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent mb-2">
             <Clock className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold">GeoTime Cloud</h1>
+          <h1 className="text-3xl font-bold">VEZIR - GeoTime</h1>
           <p className="text-muted-foreground">Вход в систему</p>
         </div>
 

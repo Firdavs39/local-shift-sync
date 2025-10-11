@@ -1,6 +1,6 @@
 {
-  "name": "GeoTime Local",
-  "short_name": "GeoTime",
+  "name": "VEZIR - GeoTime",
+  "short_name": "VEZIR",
   "description": "Система учёта рабочего времени с геолокацией",
   "start_url": "/",
   "display": "standalone",

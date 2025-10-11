@@ -22,7 +22,7 @@ const Welcome = () => {
             <Clock className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            GeoTime Cloud
+            VEZIR - GeoTime
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Система учёта рабочего времени с геолокацией. Синхронизация между устройствами.
