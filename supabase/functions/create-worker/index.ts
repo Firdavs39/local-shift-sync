@@ -34,20 +34,20 @@ serve(async (req) => {
       throw new Error('Role must be either admin or worker');
     }
 
-    // Check if PIN already exists
+    // Check if user with same name already exists
     const { data: existingProfiles, error: checkError } = await supabaseAdmin
       .from('profiles')
       .select('id')
-      .eq('pin', pin)
+      .ilike('full_name', fullName)
       .limit(1);
 
     if (checkError) {
-      console.error('Error checking existing PIN:', checkError);
+      console.error('Error checking existing user:', checkError);
       throw checkError;
     }
 
     if (existingProfiles && existingProfiles.length > 0) {
-      throw new Error('PIN already exists');
+      throw new Error('Пользователь с таким именем уже существует');
     }
 
     // Create unique email and password for worker

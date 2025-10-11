@@ -128,8 +128,8 @@ const UsersManagement = () => {
       console.error('Error creating user:', error);
       const errorMessage = error.message || String(error);
       
-      if (errorMessage.includes('PIN already exists')) {
-        toast.error('Этот PIN уже используется другим пользователем');
+      if (errorMessage.includes('уже существует')) {
+        toast.error(errorMessage);
       } else if (errorMessage.includes('PIN must be')) {
         toast.error('PIN должен состоять из 3 цифр');
       } else if (errorMessage.includes('Missing required fields')) {
