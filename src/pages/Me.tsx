@@ -34,6 +34,10 @@ interface Shift {
   status: 'early' | 'on_time' | 'late' | 'offsite';
   minutes_late: number;
   minutes_worked?: number;
+  is_paused?: boolean;
+  paused_at?: string;
+  total_paused_minutes?: number;
+  pause_history?: any;
 }
 
 const Me = () => {
@@ -136,6 +140,79 @@ const Me = () => {
     };
   }, [user]);
 
+  // Monitor location during active shift
+  useEffect(() => {
+    if (!activeShift || activeShift.ended_at) return;
+
+    const monitorLocation = async () => {
+      try {
+        const position = await getCurrentPosition();
+        const { latitude, longitude } = position.coords;
+
+        // Find the site for this shift
+        const site = sites.find(s => s.id === activeShift.site_id);
+        if (!site) return;
+
+        const isWithinSite = isWithinRadius(latitude, longitude, site.lat, site.lon, site.radius_m);
+
+        // Check if pause state needs to change
+        if (!isWithinSite && !activeShift.is_paused) {
+          // User left the site - pause the shift
+          const now = new Date().toISOString();
+          const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
+          
+          const { error } = await supabase
+            .from('shifts')
+            .update({
+              is_paused: true,
+              paused_at: now,
+              pause_history: [...pauseHistory, { paused_at: now }],
+            })
+            .eq('id', activeShift.id);
+
+          if (!error) {
+            toast.warning('Смена приостановлена - вы вышли из зоны объекта');
+          }
+        } else if (isWithinSite && activeShift.is_paused) {
+          // User returned to site - resume the shift
+          const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
+          const lastPause = pauseHistory[pauseHistory.length - 1];
+          
+          if (lastPause && !lastPause.resumed_at) {
+            const now = new Date();
+            const pausedAt = new Date(activeShift.paused_at!);
+            const pausedMinutes = Math.floor((now.getTime() - pausedAt.getTime()) / 60000);
+            
+            lastPause.resumed_at = now.toISOString();
+            
+            const { error } = await supabase
+              .from('shifts')
+              .update({
+                is_paused: false,
+                paused_at: null,
+                total_paused_minutes: (activeShift.total_paused_minutes || 0) + pausedMinutes,
+                pause_history: pauseHistory,
+              })
+              .eq('id', activeShift.id);
+
+            if (!error) {
+              toast.success('Смена возобновлена - вы вернулись в зону объекта');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error monitoring location:', error);
+      }
+    };
+
+    // Check location every 30 seconds
+    const interval = setInterval(monitorLocation, 30000);
+    // Initial check
+    monitorLocation();
+
+    return () => clearInterval(interval);
+  }, [activeShift, sites]);
+
   const toggleWakeLock = async () => {
     try {
       if (!wakeLockEnabled && 'wakeLock' in navigator) {
@@ -237,9 +314,29 @@ const Me = () => {
     try {
       const position = await getCurrentPosition();
       const { latitude, longitude } = position.coords;
+
+      // Find the site for this shift
+      const site = sites.find(s => s.id === activeShift.site_id);
+      if (!site) {
+        toast.error('Объект не найден');
+        return;
+      }
+
+      // Check if within site radius
+      const isWithinSite = isWithinRadius(latitude, longitude, site.lat, site.lon, site.radius_m);
+      
+      if (!isWithinSite) {
+        const distance = getDistance(latitude, longitude, site.lat, site.lon);
+        toast.error(`Нельзя завершить смену вне радиуса объекта! Расстояние: ${Math.round(distance)}м (допустимо: ${site.radius_m}м)`);
+        return;
+      }
+
       const now = new Date();
 
-      const minutesWorked = calculateMinutesWorked(new Date(activeShift.started_at), now);
+      // Calculate total minutes worked excluding paused time
+      const totalMinutes = calculateMinutesWorked(new Date(activeShift.started_at), now);
+      const pausedMinutes = activeShift.total_paused_minutes || 0;
+      const minutesWorked = totalMinutes - pausedMinutes;
 
       const { error } = await supabase
         .from('shifts')
@@ -248,6 +345,8 @@ const Me = () => {
           end_lat: latitude,
           end_lon: longitude,
           minutes_worked: minutesWorked,
+          is_paused: false,
+          paused_at: null,
         })
         .eq('id', activeShift.id);
 
@@ -312,9 +411,15 @@ const Me = () => {
         {activeShift ? (
           <Card className="p-6 space-y-4 border-2 border-accent">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-3 h-3 rounded-full bg-accent animate-pulse" />
-              <h2 className="text-lg font-semibold">Смена идёт</h2>
+              <div className={`w-3 h-3 rounded-full ${activeShift.is_paused ? 'bg-yellow-500' : 'bg-accent'} animate-pulse`} />
+              <h2 className="text-lg font-semibold">{activeShift.is_paused ? 'Смена на паузе' : 'Смена идёт'}</h2>
             </div>
+            
+            {activeShift.is_paused && (
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-500">
+                ⚠️ Вы находитесь вне радиуса объекта. Время не учитывается.
+              </div>
+            )}
             
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -335,6 +440,12 @@ const Me = () => {
                    'Вне объекта'}
                 </span>
               </div>
+              {activeShift.total_paused_minutes > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Время на паузе:</span>
+                  <span className="font-medium text-yellow-600">{activeShift.total_paused_minutes} мин</span>
+                </div>
+              )}
             </div>
 
             <Button

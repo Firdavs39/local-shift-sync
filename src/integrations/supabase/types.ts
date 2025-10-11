@@ -72,13 +72,17 @@ export type Database = {
           end_lon: number | null
           ended_at: string | null
           id: string
+          is_paused: boolean | null
           minutes_late: number
           minutes_worked: number | null
+          pause_history: Json | null
+          paused_at: string | null
           site_id: string
           start_lat: number
           start_lon: number
           started_at: string
           status: Database["public"]["Enums"]["shift_status"]
+          total_paused_minutes: number | null
           user_id: string
         }
         Insert: {
@@ -87,13 +91,17 @@ export type Database = {
           end_lon?: number | null
           ended_at?: string | null
           id?: string
+          is_paused?: boolean | null
           minutes_late?: number
           minutes_worked?: number | null
+          pause_history?: Json | null
+          paused_at?: string | null
           site_id: string
           start_lat: number
           start_lon: number
           started_at: string
           status: Database["public"]["Enums"]["shift_status"]
+          total_paused_minutes?: number | null
           user_id: string
         }
         Update: {
@@ -102,13 +110,17 @@ export type Database = {
           end_lon?: number | null
           ended_at?: string | null
           id?: string
+          is_paused?: boolean | null
           minutes_late?: number
           minutes_worked?: number | null
+          pause_history?: Json | null
+          paused_at?: string | null
           site_id?: string
           start_lat?: number
           start_lon?: number
           started_at?: string
           status?: Database["public"]["Enums"]["shift_status"]
+          total_paused_minutes?: number | null
           user_id?: string
         }
         Relationships: [
