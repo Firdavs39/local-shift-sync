@@ -131,9 +131,6 @@ const Auth = () => {
                 autoFocus
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Примеры: "Администратор", "Кали" (точно как в профиле)
-            </p>
           </div>
 
           <div className="space-y-2">
@@ -151,9 +148,6 @@ const Auth = () => {
                 maxLength={3}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              3-значный PIN код (для админа: 777)
-            </p>
           </div>
 
           <Button
