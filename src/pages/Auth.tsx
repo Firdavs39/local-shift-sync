@@ -16,42 +16,23 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Clear any existing session on mount to prevent auto-login
-    const clearSession = async () => {
-      try {
-        await supabase.auth.signOut();
-        localStorage.clear();
-      } catch (error) {
-        console.error('Error clearing session:', error);
+    // Check if already logged in
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .limit(1);
+        
+        if (roles && roles.length > 0) {
+          navigate(roles[0].role === 'admin' ? '/admin' : '/me');
+        }
       }
     };
 
-    clearSession();
-
-    // Set up auth state listener for new logins only
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          setTimeout(async () => {
-            const { data: roles } = await supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', session.user.id)
-              .limit(1);
-            
-            if (roles && roles.length > 0) {
-              if (roles[0].role === 'admin') {
-                navigate('/admin');
-              } else {
-                navigate('/me');
-              }
-            }
-          }, 0);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+    checkAuth();
   }, [navigate]);
 
   const handleLogin = async (e: FormEvent) => {
@@ -69,21 +50,21 @@ const Auth = () => {
 
     setLoading(true);
     try {
+      console.log('Attempting login:', { login: login.trim(), pin });
       const user = await loginWithCredentials(login.trim(), pin);
+      console.log('Login result:', user);
+      
       if (user) {
         toast.success(`Добро пожаловать, ${user.full_name}!`);
-        if (user.role === 'admin') {
-          navigate('/admin');
-        } else {
-          navigate('/me');
-        }
+        navigate(user.role === 'admin' ? '/admin' : '/me');
       } else {
         toast.error('Неверный логин или PIN код');
         setPin('');
       }
     } catch (error) {
+      console.error('Login error:', error);
       toast.error('Ошибка входа');
-      console.error(error);
+      setPin('');
     } finally {
       setLoading(false);
     }

@@ -18,22 +18,30 @@ export interface UserWithRole {
 // Login with username (login) and PIN
 export async function loginWithCredentials(login: string, pin: string): Promise<UserWithRole | null> {
   try {
+    console.log('=== LOGIN START ===', { login, pin });
+    
     // Special case for admin
     if (login.toLowerCase() === 'admin' && pin === '777') {
+      console.log('Admin login detected');
       const { data, error } = await supabase.auth.signInWithPassword({
         email: 'admin777@geotime.local',
         password: '777777777',
       });
 
+      console.log('Admin auth result:', { success: !!data, error });
+
       if (error || !data.user) {
+        console.error('Admin login failed:', error);
         return null;
       }
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', data.user.id)
         .single();
+
+      console.log('Admin profile:', { profile, profileError });
 
       if (!profile) {
         await supabase.auth.signOut();
