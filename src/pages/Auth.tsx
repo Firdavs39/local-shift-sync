@@ -88,12 +88,12 @@ const Auth = () => {
         toast.success(`Добро пожаловать, ${user.full_name}!`);
         navigate(user.role === 'admin' ? '/admin' : '/me');
       } else {
-        toast.error('Неверный логин или PIN код');
+        toast.error('Неверный логин или PIN код. Проверьте консоль браузера для деталей (F12)');
         setPin('');
       }
     } catch (error) {
       console.error('Login error:', error);
-      toast.error('Ошибка входа');
+      toast.error('Ошибка входа. Проверьте консоль браузера (F12)');
       setPin('');
     } finally {
       setLoading(false);
@@ -132,7 +132,7 @@ const Auth = () => {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Для админа: "Администратор", для сотрудников: имя из профиля
+              Примеры: "Администратор", "Кали" (точно как в профиле)
             </p>
           </div>
 
