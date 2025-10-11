@@ -1,26 +1,58 @@
-import React, { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { getCurrentUser, logout, isAdmin } from '@/lib/auth';
+import { getCurrentUser, logout, isAdmin, UserWithRole } from '@/lib/supabase-auth';
 import { Users, MapPin, FileBarChart, LogOut, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Admin = () => {
   const navigate = useNavigate();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<UserWithRole | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !isAdmin()) {
-      toast.error('Доступ запрещён');
-      navigate('/login');
-    }
-  }, [user, navigate]);
+    const checkAuth = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) {
+          toast.error('Доступ запрещён');
+          navigate('/auth');
+          return;
+        }
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+        const adminStatus = await isAdmin();
+        if (!adminStatus) {
+          toast.error('Доступ запрещён');
+          navigate('/me');
+          return;
+        }
+
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Auth error:', error);
+        toast.error('Ошибка авторизации');
+        navigate('/auth');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/auth');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   if (!user) return null;
 
@@ -34,7 +66,7 @@ const Admin = () => {
               <Settings className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-semibold">{user.fullName}</h1>
+              <h1 className="font-semibold">{user.full_name}</h1>
               <p className="text-xs text-muted-foreground">Администратор</p>
             </div>
           </div>
