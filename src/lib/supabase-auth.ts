@@ -64,13 +64,15 @@ export async function loginWithCredentials(login: string, pin: string): Promise<
 
     const profile = profiles[0];
 
-    // Get user's auth email (constructed from their ID)
-    const email = `worker${profile.id.substring(0, 8)}@geotime.local`;
+    // Use email from profile
+    if (!profile.email) {
+      return null;
+    }
     
-    // Sign in with constructed credentials
+    // Sign in with email from profile and password = fullName (no spaces) + PIN
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: `${login}${pin}`, // password = login + pin
+      email: profile.email,
+      password: `${profile.full_name.replace(/\s+/g, '')}${pin}`,
     });
 
     if (error || !data.user) {

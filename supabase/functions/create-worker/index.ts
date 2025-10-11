@@ -74,6 +74,17 @@ serve(async (req) => {
 
     console.log('User created successfully:', authData.user.id);
 
+    // Update profile with email
+    const { error: profileUpdateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ email })
+      .eq('id', authData.user.id);
+
+    if (profileUpdateError) {
+      console.error('Error updating profile with email:', profileUpdateError);
+      throw profileUpdateError;
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,
