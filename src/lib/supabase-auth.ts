@@ -61,19 +61,22 @@ export async function loginWithCredentials(login: string, pin: string): Promise<
   const { data: profiles, error: profileError } = await supabase
     .from('profiles')
     .select('*')
-    .ilike('full_name', login)
-    .eq('pin', pin)
-    .eq('active', true)
-    .limit(1);
+    .eq('active', true);
 
-  console.log('Profile search:', { login, pin, profiles, profileError });
+  console.log('All active profiles:', profiles);
 
-  if (profileError || !profiles || profiles.length === 0) {
+  // Find matching profile by full_name (case-insensitive) and PIN
+  const profile = profiles?.find(p => 
+    p.full_name.toLowerCase() === login.toLowerCase() && p.pin === pin
+  );
+
+  console.log('Profile search:', { login, pin, foundProfile: !!profile, profileError });
+
+  if (profileError || !profile) {
     console.log('No profile found or error:', profileError);
     return null;
   }
 
-  const profile = profiles[0];
   console.log('Found profile:', profile);
 
   // Use email from profile
