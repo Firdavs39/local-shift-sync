@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Welcome from "./pages/Welcome";
-import Login from "./pages/Login";
+import Auth from "./pages/Auth";
 import Me from "./pages/Me";
 import Admin from "./pages/Admin";
 import SitesManagement from "./pages/SitesManagement";
@@ -21,7 +21,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/welcome" replace />} />
           <Route path="/welcome" element={<Welcome />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/me" element={
             <ProtectedRoute>
               <Me />

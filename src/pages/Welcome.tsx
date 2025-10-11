@@ -3,25 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Clock, MapPin, Shield, Users } from 'lucide-react';
-import { db } from '@/lib/db';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const Welcome = () => {
   const navigate = useNavigate();
   const [isFirstLaunch, setIsFirstLaunch] = useState(true);
 
   useEffect(() => {
-    // Check if there are any users in the database
-    db.users.count().then(count => {
-      if (count > 0) {
-        setIsFirstLaunch(false);
+    // Initialize admin on first launch
+    const initializeAdmin = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('create-admin');
+        
+        if (error) {
+          console.error('Error creating admin:', error);
+        } else {
+          console.log('Admin initialization:', data);
+        }
+      } catch (error) {
+        console.error('Failed to initialize admin:', error);
       }
-    });
+    };
+
+    initializeAdmin();
   }, []);
 
   const handleAdminSetup = async () => {
-    // Admin with PIN 777 is created automatically on DB init
-    alert(`PIN администратора: 777`);
-    navigate('/login');
+    // Redirect to auth page
+    navigate('/auth');
   };
 
   return (
@@ -33,10 +43,10 @@ const Welcome = () => {
             <Clock className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            GeoTime Local
+            GeoTime Cloud
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Система учёта рабочего времени с геолокацией. Работает полностью офлайн на вашем устройстве.
+            Система учёта рабочего времени с геолокацией. Синхронизация между устройствами.
           </p>
         </div>
 
@@ -56,50 +66,35 @@ const Welcome = () => {
           
           <Card className="p-6 space-y-3 border-2 hover:border-primary/50 transition-colors">
             <Shield className="w-8 h-8 text-primary" />
-            <h3 className="font-semibold">Офлайн режим</h3>
-            <p className="text-sm text-muted-foreground">Работает без интернета</p>
+            <h3 className="font-semibold">Облачная синхронизация</h3>
+            <p className="text-sm text-muted-foreground">Доступ с любого устройства</p>
           </Card>
           
           <Card className="p-6 space-y-3 border-2 hover:border-accent/50 transition-colors">
             <Users className="w-8 h-8 text-accent" />
-            <h3 className="font-semibold">До 20 сотрудников</h3>
-            <p className="text-sm text-muted-foreground">Локальное управление командой</p>
+            <h3 className="font-semibold">Неограниченно сотрудников</h3>
+            <p className="text-sm text-muted-foreground">Облачное управление командой</p>
           </Card>
         </div>
 
         {/* Role Selection */}
         <Card className="p-8 space-y-6">
           <div className="text-center space-y-2">
-            <h2 className="text-2xl font-bold">Начало работы</h2>
-            <p className="text-muted-foreground">Выберите вашу роль для первой настройки</p>
+            <h2 className="text-2xl font-bold">Вход в систему</h2>
+            <p className="text-muted-foreground">Войдите с вашим PIN кодом</p>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-4">
-            <Button
-              size="lg"
-              className="h-32 text-lg bg-gradient-to-br from-primary to-primary-glow hover:shadow-lg transition-all"
-              onClick={handleAdminSetup}
-            >
-              <div className="space-y-2">
-                <Shield className="w-8 h-8 mx-auto" />
-                <div>Я администратор</div>
-                <div className="text-xs opacity-80 font-normal">Настройка системы и управление</div>
-              </div>
-            </Button>
-            
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-32 text-lg border-2 hover:bg-accent/10 hover:border-accent transition-all"
-              onClick={() => navigate('/login')}
-            >
-              <div className="space-y-2">
-                <Users className="w-8 h-8 mx-auto" />
-                <div>Я сотрудник</div>
-                <div className="text-xs opacity-80 font-normal">Отметка времени на объектах</div>
-              </div>
-            </Button>
-          </div>
+          <Button
+            size="lg"
+            className="w-full h-20 text-lg bg-gradient-to-br from-primary to-accent hover:shadow-lg transition-all"
+            onClick={handleAdminSetup}
+          >
+            <div className="space-y-1">
+              <Shield className="w-8 h-8 mx-auto" />
+              <div>Войти</div>
+              <div className="text-xs opacity-80 font-normal">Введите ваш PIN код</div>
+            </div>
+          </Button>
         </Card>
       </div>
     </div>
