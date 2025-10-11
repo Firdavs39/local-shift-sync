@@ -5,7 +5,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Welcome from "./pages/Welcome";
 import Auth from "./pages/Auth";
-import Register from "./pages/Register";
 import Me from "./pages/Me";
 import Admin from "./pages/Admin";
 import SitesManagement from "./pages/SitesManagement";
@@ -23,7 +22,6 @@ function App() {
           <Route path="/" element={<Navigate to="/welcome" replace />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/register" element={<Register />} />
           <Route path="/me" element={
             <ProtectedRoute>
               <Me />
