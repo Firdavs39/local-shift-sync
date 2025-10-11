@@ -15,19 +15,16 @@ export interface UserWithRole {
   role: 'admin' | 'worker';
 }
 
-export async function signUpWorker(fullName: string, pin: string, role: 'admin' | 'worker' = 'worker') {
-  // Create user with temporary email (PIN-based)
-  const email = `user${pin}@geotime.local`;
-  const password = `pin${pin}${Math.random().toString(36).slice(2)}`;
-
+// Register new worker with email and password
+export async function registerWorker(email: string, password: string, fullName: string) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: {
         full_name: fullName,
-        pin,
-        role,
+        pin: '',
+        role: 'worker',
       },
       emailRedirectTo: `${window.location.origin}/`,
     },
@@ -37,45 +34,39 @@ export async function signUpWorker(fullName: string, pin: string, role: 'admin' 
   return data;
 }
 
-export async function loginWithPin(pin: string): Promise<UserWithRole | null> {
+// Login with email and password (for workers)
+export async function loginWithEmail(email: string, password: string): Promise<UserWithRole | null> {
   try {
-    // First, find user by PIN
-    const { data: profiles, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('pin', pin)
-      .eq('active', true)
-      .limit(1);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    if (profileError || !profiles || profiles.length === 0) {
+    if (error || !data.user) {
       return null;
     }
 
-    const profile = profiles[0];
+    // Get profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
 
-    // Get user role
+    if (profileError || !profile || !profile.active) {
+      await supabase.auth.signOut();
+      return null;
+    }
+
+    // Get role
     const { data: roles, error: roleError } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', profile.id)
+      .eq('user_id', data.user.id)
       .limit(1);
 
     if (roleError || !roles || roles.length === 0) {
-      return null;
-    }
-
-    // Sign in with email/password (PIN-based)
-    const email = `user${pin}@geotime.local`;
-    const password = `pin${pin}${Math.random().toString(36).slice(2)}`;
-    
-    // Since we don't know the random password, we'll use a workaround:
-    // Admin creates a session for the user
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password: pin + pin + pin, // Simple password: PIN repeated 3 times
-    });
-
-    if (signInError) {
+      await supabase.auth.signOut();
       return null;
     }
 
@@ -88,6 +79,60 @@ export async function loginWithPin(pin: string): Promise<UserWithRole | null> {
     };
   } catch (error) {
     console.error('Login error:', error);
+    return null;
+  }
+}
+
+// Login with PIN (for admin only)
+export async function loginWithPin(pin: string): Promise<UserWithRole | null> {
+  try {
+    if (pin !== '777') {
+      return null;
+    }
+
+    // Admin login with hardcoded credentials
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: 'admin777@geotime.local',
+      password: '777777777',
+    });
+
+    if (error || !data.user) {
+      return null;
+    }
+
+    // Get profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      await supabase.auth.signOut();
+      return null;
+    }
+
+    // Get role
+    const { data: roles, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', data.user.id)
+      .limit(1);
+
+    if (roleError || !roles || roles.length === 0 || roles[0].role !== 'admin') {
+      await supabase.auth.signOut();
+      return null;
+    }
+
+    return {
+      id: profile.id,
+      full_name: profile.full_name,
+      pin: profile.pin,
+      active: profile.active,
+      role: 'admin',
+    };
+  } catch (error) {
+    console.error('Admin login error:', error);
     return null;
   }
 }

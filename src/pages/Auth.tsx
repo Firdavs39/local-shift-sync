@@ -3,14 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Clock, Lock, ArrowLeft } from 'lucide-react';
-import { loginWithPin, signUpWorker } from '@/lib/supabase-auth';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Clock, Lock, ArrowLeft, Mail, Shield } from 'lucide-react';
+import { loginWithPin, loginWithEmail } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const Auth = () => {
   const navigate = useNavigate();
-  const [pin, setPin] = useState('');
+  const [adminPin, setAdminPin] = useState('');
+  const [workerEmail, setWorkerEmail] = useState('');
+  const [workerPassword, setWorkerPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -64,26 +68,47 @@ const Auth = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length !== 3) {
+    if (adminPin.length !== 3) {
       toast.error('PIN должен быть 3 цифры');
       return;
     }
 
     setLoading(true);
     try {
-      const user = await loginWithPin(pin);
+      const user = await loginWithPin(adminPin);
       if (user) {
         toast.success(`Добро пожаловать, ${user.full_name}!`);
-        if (user.role === 'admin') {
-          navigate('/admin');
-        } else {
-          navigate('/me');
-        }
+        navigate('/admin');
       } else {
-        toast.error('Неверный PIN или пользователь неактивен');
-        setPin('');
+        toast.error('Неверный PIN администратора');
+        setAdminPin('');
+      }
+    } catch (error) {
+      toast.error('Ошибка входа');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWorkerLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!workerEmail || !workerPassword) {
+      toast.error('Введите email и пароль');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const user = await loginWithEmail(workerEmail, workerPassword);
+      if (user) {
+        toast.success(`Добро пожаловать, ${user.full_name}!`);
+        navigate('/me');
+      } else {
+        toast.error('Неверный email или пароль');
       }
     } catch (error) {
       toast.error('Ошибка входа');
@@ -95,7 +120,7 @@ const Auth = () => {
 
   const handlePinInput = (value: string) => {
     const numbers = value.replace(/\D/g, '').slice(0, 3);
-    setPin(numbers);
+    setAdminPin(numbers);
   };
 
   return (
@@ -106,37 +131,103 @@ const Auth = () => {
             <Clock className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold">GeoTime Cloud</h1>
-          <p className="text-muted-foreground">Введите ваш PIN-код</p>
+          <p className="text-muted-foreground">Вход в систему</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-2">
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                type="password"
-                inputMode="numeric"
-                placeholder="•••"
-                value={pin}
-                onChange={(e) => handlePinInput(e.target.value)}
-                className="pl-10 text-center text-2xl tracking-widest h-14"
-                maxLength={3}
-                autoFocus
-              />
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              3-значный PIN код
-            </p>
-          </div>
+        <Tabs defaultValue="worker" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="worker">Сотрудник</TabsTrigger>
+            <TabsTrigger value="admin">Администратор</TabsTrigger>
+          </TabsList>
 
-          <Button
-            type="submit"
-            className="w-full h-12 bg-gradient-to-r from-primary to-accent"
-            disabled={pin.length !== 3 || loading}
-          >
-            {loading ? 'Проверка...' : 'Войти'}
-          </Button>
-        </form>
+          <TabsContent value="worker" className="space-y-4">
+            <form onSubmit={handleWorkerLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={workerEmail}
+                    onChange={(e) => setWorkerEmail(e.target.value)}
+                    className="pl-10"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Пароль</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••"
+                    value={workerPassword}
+                    onChange={(e) => setWorkerPassword(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-12 bg-gradient-to-r from-primary to-accent"
+                disabled={loading}
+              >
+                {loading ? 'Вход...' : 'Войти'}
+              </Button>
+
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  Нет аккаунта?{' '}
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto"
+                    onClick={() => navigate('/register')}
+                  >
+                    Зарегистрироваться
+                  </Button>
+                </p>
+              </div>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="admin" className="space-y-4">
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="admin-pin">PIN администратора</Label>
+                <div className="relative">
+                  <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="admin-pin"
+                    type="password"
+                    inputMode="numeric"
+                    placeholder="•••"
+                    value={adminPin}
+                    onChange={(e) => handlePinInput(e.target.value)}
+                    className="pl-10 text-center text-2xl tracking-widest h-14"
+                    maxLength={3}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  По умолчанию: 777
+                </p>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-12 bg-gradient-to-r from-primary to-accent"
+                disabled={adminPin.length !== 3 || loading}
+              >
+                {loading ? 'Проверка...' : 'Войти как админ'}
+              </Button>
+            </form>
+          </TabsContent>
+        </Tabs>
 
         <div className="text-center">
           <Button
