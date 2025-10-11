@@ -63,12 +63,15 @@ export async function loginWithCredentials(login: string, pin: string): Promise<
     .select('*')
     .eq('active', true);
 
-  console.log('All active profiles:', profiles);
+  console.log('All active profiles:', profiles?.map(p => ({ name: p.full_name, pin: p.pin, hasEmail: !!p.email })));
 
   // Find matching profile by full_name (case-insensitive) and PIN
-  const profile = profiles?.find(p => 
-    p.full_name.toLowerCase() === login.toLowerCase() && p.pin === pin
-  );
+  const profile = profiles?.find(p => {
+    const nameMatch = p.full_name.toLowerCase() === login.toLowerCase();
+    const pinMatch = p.pin === pin;
+    console.log(`Checking profile ${p.full_name}: nameMatch=${nameMatch}, pinMatch=${pinMatch}, pin in DB="${p.pin}", pin entered="${pin}"`);
+    return nameMatch && pinMatch;
+  });
 
   console.log('Profile search:', { login, pin, foundProfile: !!profile, profileError });
 
