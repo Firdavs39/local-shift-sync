@@ -168,10 +168,33 @@ const Me = () => {
       const isWithinSite = isWithinRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m);
 
       const now = new Date();
-      const status = getShiftStatus(now, selectedSite.expected_start, isWithinSite);
-      const minutesLate = status === 'late' ? 
-        parseInt(formatTime(now).split(':')[0]) * 60 + parseInt(formatTime(now).split(':')[1]) - 
-        parseInt(selectedSite.expected_start.split(':')[0]) * 60 - parseInt(selectedSite.expected_start.split(':')[1]) : 0;
+      
+      // Check if user already has shifts today
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      
+      const { data: todayShifts } = await supabase
+        .from('shifts')
+        .select('id')
+        .eq('user_id', user.id)
+        .gte('started_at', startOfToday.toISOString());
+      
+      const isFirstShiftToday = !todayShifts || todayShifts.length === 0;
+      
+      // Calculate status and late minutes only for first shift of the day
+      let status: 'early' | 'on_time' | 'late' | 'offsite';
+      let minutesLate = 0;
+      
+      if (isFirstShiftToday) {
+        status = getShiftStatus(now, selectedSite.expected_start, isWithinSite);
+        minutesLate = status === 'late' ? 
+          parseInt(formatTime(now).split(':')[0]) * 60 + parseInt(formatTime(now).split(':')[1]) - 
+          parseInt(selectedSite.expected_start.split(':')[0]) * 60 - parseInt(selectedSite.expected_start.split(':')[1]) : 0;
+      } else {
+        // Not first shift today - no late penalty
+        status = isWithinSite ? 'on_time' : 'offsite';
+        minutesLate = 0;
+      }
 
       const { data, error } = await supabase
         .from('shifts')
