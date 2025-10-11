@@ -16,30 +16,19 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if user is already logged in
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Redirect based on role
-        const { data: roles } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .limit(1);
-        
-        if (roles && roles.length > 0) {
-          if (roles[0].role === 'admin') {
-            navigate('/admin');
-          } else {
-            navigate('/me');
-          }
-        }
+    // Clear any existing session on mount to prevent auto-login
+    const clearSession = async () => {
+      try {
+        await supabase.auth.signOut();
+        localStorage.clear();
+      } catch (error) {
+        console.error('Error clearing session:', error);
       }
     };
 
-    checkAuth();
+    clearSession();
 
-    // Set up auth state listener
+    // Set up auth state listener for new logins only
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session) {

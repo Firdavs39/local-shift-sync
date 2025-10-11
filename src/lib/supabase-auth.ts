@@ -106,6 +106,8 @@ export async function loginWithCredentials(login: string, pin: string): Promise<
 
 export async function logout() {
   await supabase.auth.signOut();
+  // Clear all auth-related data from localStorage
+  localStorage.clear();
 }
 
 export async function getCurrentUser(): Promise<UserWithRole | null> {
