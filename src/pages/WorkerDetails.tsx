@@ -7,8 +7,9 @@ import { ArrowLeft, User, Calendar } from 'lucide-react';
 import { formatDate, calculateEarlyMinutes } from '@/lib/time';
 import { toast } from 'sonner';
 import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
-import { DailyBreakdown } from '@/components/shifts/DailyBreakdown';
+import { AdminDailyBreakdown } from '@/components/shifts/AdminDailyBreakdown';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { groupShiftsByWorkerSiteDay, GroupedShift } from '@/lib/shift-grouping';
 
 interface WorkerProfile {
   id: string;
@@ -20,6 +21,8 @@ interface WorkerProfile {
 
 interface ShiftDetail {
   id: string;
+  user_id: string;
+  user_name: string;
   site_id: string;
   site_name: string;
   started_at: string;
@@ -30,13 +33,14 @@ interface ShiftDetail {
   early_minutes?: number;
   pause_history?: any[];
   total_paused_minutes?: number;
+  expected_start?: string;
 }
 
 const WorkerDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [worker, setWorker] = useState<WorkerProfile | null>(null);
-  const [shifts, setShifts] = useState<ShiftDetail[]>([]);
+  const [shifts, setShifts] = useState<GroupedShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -108,15 +112,26 @@ const WorkerDetails = () => {
               : undefined;
             
             return {
-              ...shift,
-              status: shift.status as 'early' | 'on_time' | 'late',
+              id: shift.id,
+              user_id: id!,
+              user_name: profile.full_name,
+              site_id: shift.site_id,
               site_name: siteInfo?.name || 'Неизвестно',
+              started_at: shift.started_at,
+              ended_at: shift.ended_at,
+              status: shift.status as 'early' | 'on_time' | 'late',
+              minutes_late: shift.minutes_late,
+              minutes_worked: shift.minutes_worked,
               early_minutes: earlyMinutes,
               pause_history: Array.isArray(shift.pause_history) ? shift.pause_history : [],
+              total_paused_minutes: shift.total_paused_minutes,
+              expected_start: siteInfo?.expected_start,
             };
           });
 
-        setShifts(enrichedShifts);
+        // Группируем смены по объекту + день
+        const groupedShifts = groupShiftsByWorkerSiteDay(enrichedShifts);
+        setShifts(groupedShifts);
       } catch (error) {
         console.error('Error loading worker data:', error);
         toast.error('Ошибка загрузки данных сотрудника');
@@ -149,7 +164,7 @@ const WorkerDetails = () => {
   };
 
   const groupShiftsByDay = () => {
-    const grouped = new Map<string, ShiftDetail[]>();
+    const grouped = new Map<string, GroupedShift[]>();
     
     shifts.forEach(shift => {
       const date = formatDate(new Date(shift.started_at));
@@ -163,6 +178,7 @@ const WorkerDetails = () => {
       const workedMinutes = dayShifts.reduce((sum, s) => sum + (s.minutes_worked || 0), 0);
       const lateMinutes = dayShifts.reduce((sum, s) => sum + s.minutes_late, 0);
       const earlyMinutes = dayShifts.reduce((sum, s) => sum + (s.early_minutes || 0), 0);
+      const totalPausedMinutes = dayShifts.reduce((sum, s) => sum + (s.total_paused_minutes || 0), 0);
       
       return {
         date,
@@ -171,6 +187,7 @@ const WorkerDetails = () => {
           workedMinutes,
           lateMinutes,
           earlyMinutes,
+          totalPausedMinutes,
         },
       };
     });
@@ -282,27 +299,8 @@ const WorkerDetails = () => {
               <p className="text-muted-foreground">Нет данных о сменах за выбранный период</p>
             </div>
           ) : (
-            <DailyBreakdown 
-              dailyBreakdown={groupShiftsByDay().map(day => ({
-                ...day,
-                shifts: day.shifts.map(shift => ({
-                  ...shift,
-                  site_name: shift.site_name,
-                  pause_events: (shift.pause_history || []).map((pause: any) => {
-                    if (pause.paused_at && pause.resumed_at) {
-                      const pausedAt = new Date(pause.paused_at);
-                      const resumedAt = new Date(pause.resumed_at);
-                      const duration = Math.floor((resumedAt.getTime() - pausedAt.getTime()) / 60000);
-                      return {
-                        paused_at: pause.paused_at,
-                        resumed_at: pause.resumed_at,
-                        duration_minutes: duration,
-                      };
-                    }
-                    return pause;
-                  }),
-                }))
-              }))} 
+            <AdminDailyBreakdown 
+              dailyBreakdown={groupShiftsByDay()} 
             />
           )}
         </Card>

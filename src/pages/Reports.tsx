@@ -9,6 +9,7 @@ import { formatTime, formatDate, calculateEarlyMinutes } from '@/lib/time';
 import { toast } from 'sonner';
 import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { groupShiftsByWorkerSiteDay, GroupedShift } from '@/lib/shift-grouping';
 
 interface ShiftReport {
   id: string;
@@ -29,7 +30,7 @@ interface ShiftReport {
 
 const Reports = () => {
   const navigate = useNavigate();
-  const [shifts, setShifts] = useState<ShiftReport[]>([]);
+  const [shifts, setShifts] = useState<GroupedShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -115,7 +116,9 @@ const Reports = () => {
           };
         });
 
-      setShifts(enrichedShifts);
+      // Группируем смены по работнику + объект + день
+      const groupedShifts = groupShiftsByWorkerSiteDay(enrichedShifts);
+      setShifts(groupedShifts);
     } catch (error) {
       console.error('Error loading shifts:', error);
       toast.error('Ошибка загрузки отчётов');
@@ -205,7 +208,14 @@ const Reports = () => {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => navigate(`/admin/workers/${shift.user_id}`)}
                     >
-                      <TableCell className="font-medium">{shift.user_name}</TableCell>
+                      <TableCell className="font-medium">
+                        {shift.user_name}
+                        {shift.is_grouped && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            🔄 {shift.shift_segments.length} смен(ы)
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>{shift.site_name}</TableCell>
                       <TableCell>
                         <div className="text-sm">
@@ -241,10 +251,17 @@ const Reports = () => {
                       </TableCell>
                       <TableCell>
                         {shift.pause_history && shift.pause_history.length > 0 ? (
-                          <span className="text-amber-600 flex items-center gap-1">
-                            <Pause className="w-3 h-3" />
-                            {shift.pause_history.length} ({shift.total_paused_minutes || 0} мин)
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-amber-600 flex items-center gap-1">
+                              <Pause className="w-3 h-3" />
+                              {shift.pause_history.length} ({shift.total_paused_minutes || 0} мин)
+                            </span>
+                            {shift.is_grouped && shift.auto_pauses.length > 0 && (
+                              <span className="text-xs text-orange-600">
+                                🔄 {shift.auto_pauses.length} автопауз(ы)
+                              </span>
+                            )}
+                          </div>
                         ) : '-'}
                       </TableCell>
                       <TableCell>
