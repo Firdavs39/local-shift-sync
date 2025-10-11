@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, User, Calendar } from 'lucide-react';
-import { formatTime, formatDate } from '@/lib/time';
+import { formatDate, calculateEarlyMinutes } from '@/lib/time';
 import { toast } from 'sonner';
+import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
+import { DailyBreakdown } from '@/components/shifts/DailyBreakdown';
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 
 interface WorkerProfile {
   id: string;
@@ -22,9 +24,12 @@ interface ShiftDetail {
   site_name: string;
   started_at: string;
   ended_at?: string;
-  status: 'early' | 'on_time' | 'late' | 'offsite';
+  status: 'early' | 'on_time' | 'late';
   minutes_late: number;
   minutes_worked?: number;
+  early_minutes?: number;
+  pause_history?: any[];
+  total_paused_minutes?: number;
 }
 
 const WorkerDetails = () => {
@@ -33,6 +38,28 @@ const WorkerDetails = () => {
   const [worker, setWorker] = useState<WorkerProfile | null>(null);
   const [shifts, setShifts] = useState<ShiftDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
+  const getPeriodRange = () => {
+    switch (selectedPeriod) {
+      case 'day':
+        return {
+          start: startOfDay(selectedDate),
+          end: endOfDay(selectedDate),
+        };
+      case 'week':
+        return {
+          start: startOfWeek(selectedDate, { weekStartsOn: 1 }),
+          end: endOfWeek(selectedDate, { weekStartsOn: 1 }),
+        };
+      case 'month':
+        return {
+          start: startOfMonth(selectedDate),
+          end: endOfMonth(selectedDate),
+        };
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -50,28 +77,44 @@ const WorkerDetails = () => {
         if (profileError) throw profileError;
         setWorker(profile);
 
-        // Load worker shifts
+        const { start, end } = getPeriodRange();
+
+        // Load worker shifts for period
         const { data: shiftsData, error: shiftsError } = await supabase
           .from('shifts')
           .select('*')
           .eq('user_id', id)
+          .gte('started_at', start.toISOString())
+          .lte('started_at', end.toISOString())
           .order('started_at', { ascending: false });
 
         if (shiftsError) throw shiftsError;
 
-        // Load site names
+        // Load site names and expected start times
         const siteIds = [...new Set(shiftsData?.map(s => s.site_id) || [])];
         const { data: sites } = await supabase
           .from('sites')
-          .select('id, name')
+          .select('id, name, expected_start')
           .in('id', siteIds);
 
-        const siteMap = new Map(sites?.map(s => [s.id, s.name]));
+        const siteMap = new Map(sites?.map(s => [s.id, { name: s.name, expected_start: s.expected_start }]));
 
-        const enrichedShifts: ShiftDetail[] = (shiftsData || []).map(shift => ({
-          ...shift,
-          site_name: siteMap.get(shift.site_id) || 'Неизвестно',
-        }));
+        const enrichedShifts: ShiftDetail[] = (shiftsData || [])
+          .filter(shift => shift.status !== 'offsite') // Filter out old offsite shifts
+          .map(shift => {
+            const siteInfo = siteMap.get(shift.site_id);
+            const earlyMinutes = siteInfo?.expected_start 
+              ? calculateEarlyMinutes(new Date(shift.started_at), siteInfo.expected_start)
+              : undefined;
+            
+            return {
+              ...shift,
+              status: shift.status as 'early' | 'on_time' | 'late',
+              site_name: siteInfo?.name || 'Неизвестно',
+              early_minutes: earlyMinutes,
+              pause_history: Array.isArray(shift.pause_history) ? shift.pause_history : [],
+            };
+          });
 
         setShifts(enrichedShifts);
       } catch (error) {
@@ -83,31 +126,14 @@ const WorkerDetails = () => {
     };
 
     loadWorkerData();
-  }, [id]);
+  }, [id, selectedPeriod, selectedDate]);
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'on_time': return 'Вовремя';
-      case 'late': return 'Опоздание';
-      case 'early': return 'Раньше';
-      case 'offsite': return 'Вне объекта';
-      default: return status;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'on_time': return 'text-green-600';
-      case 'late': return 'text-red-600';
-      case 'early': return 'text-blue-600';
-      case 'offsite': return 'text-gray-600';
-      default: return '';
-    }
-  };
 
   const calculateTotalStats = () => {
     const totalMinutesWorked = shifts.reduce((sum, shift) => sum + (shift.minutes_worked || 0), 0);
     const totalMinutesLate = shifts.reduce((sum, shift) => sum + shift.minutes_late, 0);
+    const totalMinutesEarly = shifts.reduce((sum, shift) => sum + (shift.early_minutes || 0), 0);
+    const totalPausedMinutes = shifts.reduce((sum, shift) => sum + (shift.total_paused_minutes || 0), 0);
     const completedShifts = shifts.filter(s => s.ended_at).length;
     const activeShifts = shifts.filter(s => !s.ended_at).length;
 
@@ -115,9 +141,39 @@ const WorkerDetails = () => {
       totalHours: Math.floor(totalMinutesWorked / 60),
       totalMinutes: totalMinutesWorked % 60,
       totalLateMinutes: totalMinutesLate,
+      totalEarlyMinutes: totalMinutesEarly,
+      totalPausedMinutes: totalPausedMinutes,
       completedShifts,
       activeShifts,
     };
+  };
+
+  const groupShiftsByDay = () => {
+    const grouped = new Map<string, ShiftDetail[]>();
+    
+    shifts.forEach(shift => {
+      const date = formatDate(new Date(shift.started_at));
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
+      }
+      grouped.get(date)!.push(shift);
+    });
+    
+    return Array.from(grouped.entries()).map(([date, dayShifts]) => {
+      const workedMinutes = dayShifts.reduce((sum, s) => sum + (s.minutes_worked || 0), 0);
+      const lateMinutes = dayShifts.reduce((sum, s) => sum + s.minutes_late, 0);
+      const earlyMinutes = dayShifts.reduce((sum, s) => sum + (s.early_minutes || 0), 0);
+      
+      return {
+        date,
+        shifts: dayShifts,
+        dayStats: {
+          workedMinutes,
+          lateMinutes,
+          earlyMinutes,
+        },
+      };
+    });
   };
 
   if (loading) {
@@ -178,29 +234,43 @@ const WorkerDetails = () => {
           </div>
         </Card>
 
+        {/* Period Filter */}
+        <Card className="p-6">
+          <PeriodFilter
+            selectedPeriod={selectedPeriod}
+            selectedDate={selectedDate}
+            onPeriodChange={setSelectedPeriod}
+            onDateChange={setSelectedDate}
+          />
+        </Card>
+
         {/* Statistics Cards */}
-        <div className="grid md:grid-cols-4 gap-4">
+        <div className="grid md:grid-cols-5 gap-4">
           <Card className="p-4 text-center">
             <div className="text-2xl font-bold text-primary">{stats.completedShifts}</div>
             <div className="text-sm text-muted-foreground">Завершённых смен</div>
           </Card>
           <Card className="p-4 text-center">
-            <div className="text-2xl font-bold text-accent">{stats.activeShifts}</div>
-            <div className="text-sm text-muted-foreground">Активных смен</div>
-          </Card>
-          <Card className="p-4 text-center">
             <div className="text-2xl font-bold text-primary">
               {stats.totalHours}ч {stats.totalMinutes}м
             </div>
-            <div className="text-sm text-muted-foreground">Всего отработано</div>
+            <div className="text-sm text-muted-foreground">Отработано</div>
           </Card>
           <Card className="p-4 text-center">
             <div className="text-2xl font-bold text-red-600">{stats.totalLateMinutes} мин</div>
-            <div className="text-sm text-muted-foreground">Всего опозданий</div>
+            <div className="text-sm text-muted-foreground">Опозданий</div>
+          </Card>
+          <Card className="p-4 text-center">
+            <div className="text-2xl font-bold text-blue-600">{stats.totalEarlyMinutes} мин</div>
+            <div className="text-sm text-muted-foreground">Раньше времени</div>
+          </Card>
+          <Card className="p-4 text-center">
+            <div className="text-2xl font-bold text-amber-600">{stats.totalPausedMinutes} мин</div>
+            <div className="text-sm text-muted-foreground">На паузах</div>
           </Card>
         </div>
 
-        {/* Shifts History */}
+        {/* Shifts History with Daily Breakdown */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5" />
@@ -209,59 +279,31 @@ const WorkerDetails = () => {
           
           {shifts.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">Нет данных о сменах</p>
+              <p className="text-muted-foreground">Нет данных о сменах за выбранный период</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Объект</TableHead>
-                    <TableHead>Начало</TableHead>
-                    <TableHead>Конец</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Опоздание</TableHead>
-                    <TableHead>Отработано</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {shifts.map((shift) => (
-                    <TableRow key={shift.id}>
-                      <TableCell className="font-medium">{shift.site_name}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{formatDate(new Date(shift.started_at))}</div>
-                          <div className="text-muted-foreground">{formatTime(new Date(shift.started_at))}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {shift.ended_at ? (
-                          <div className="text-sm">
-                            <div>{formatDate(new Date(shift.ended_at))}</div>
-                            <div className="text-muted-foreground">{formatTime(new Date(shift.ended_at))}</div>
-                          </div>
-                        ) : (
-                          <span className="text-accent font-medium">В процессе</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={getStatusColor(shift.status)}>
-                          {getStatusLabel(shift.status)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {shift.minutes_late > 0 ? `${shift.minutes_late} мин` : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {shift.minutes_worked 
-                          ? `${Math.floor(shift.minutes_worked / 60)}ч ${shift.minutes_worked % 60}м`
-                          : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <DailyBreakdown 
+              dailyBreakdown={groupShiftsByDay().map(day => ({
+                ...day,
+                shifts: day.shifts.map(shift => ({
+                  ...shift,
+                  site_name: shift.site_name,
+                  pause_events: (shift.pause_history || []).map((pause: any) => {
+                    if (pause.paused_at && pause.resumed_at) {
+                      const pausedAt = new Date(pause.paused_at);
+                      const resumedAt = new Date(pause.resumed_at);
+                      const duration = Math.floor((resumedAt.getTime() - pausedAt.getTime()) / 60000);
+                      return {
+                        paused_at: pause.paused_at,
+                        resumed_at: pause.resumed_at,
+                        duration_minutes: duration,
+                      };
+                    }
+                    return pause;
+                  }),
+                }))
+              }))} 
+            />
           )}
         </Card>
       </main>

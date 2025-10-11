@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { CalendarIcon } from 'lucide-react';
 
-type PeriodType = 'day' | 'week' | 'month';
+export type PeriodType = 'day' | 'week' | 'month';
 
 interface PeriodFilterProps {
   selectedPeriod: PeriodType;

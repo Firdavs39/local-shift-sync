@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, RefreshCw, Users } from 'lucide-react';
-import { formatTime, formatDate } from '@/lib/time';
+import { ArrowLeft, RefreshCw, Users, Pause, TrendingUp } from 'lucide-react';
+import { formatTime, formatDate, calculateEarlyMinutes } from '@/lib/time';
 import { toast } from 'sonner';
+import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 
 interface ShiftReport {
   id: string;
@@ -16,19 +18,47 @@ interface ShiftReport {
   site_name: string;
   started_at: string;
   ended_at?: string;
-  status: 'early' | 'on_time' | 'late' | 'offsite';
+  status: 'early' | 'on_time' | 'late';
   minutes_late: number;
   minutes_worked?: number;
+  early_minutes?: number;
+  pause_history?: any[];
+  total_paused_minutes?: number;
+  expected_start?: string;
 }
 
 const Reports = () => {
   const navigate = useNavigate();
   const [shifts, setShifts] = useState<ShiftReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
+  const getPeriodRange = () => {
+    switch (selectedPeriod) {
+      case 'day':
+        return {
+          start: startOfDay(selectedDate),
+          end: endOfDay(selectedDate),
+        };
+      case 'week':
+        return {
+          start: startOfWeek(selectedDate, { weekStartsOn: 1 }),
+          end: endOfWeek(selectedDate, { weekStartsOn: 1 }),
+        };
+      case 'month':
+        return {
+          start: startOfMonth(selectedDate),
+          end: endOfMonth(selectedDate),
+        };
+    }
+  };
 
   const loadShifts = async () => {
     setLoading(true);
     try {
+      const { start, end } = getPeriodRange();
+      
       const { data: shiftsData, error } = await supabase
         .from('shifts')
         .select(`
@@ -39,8 +69,12 @@ const Reports = () => {
           ended_at,
           status,
           minutes_late,
-          minutes_worked
+          minutes_worked,
+          pause_history,
+          total_paused_minutes
         `)
+        .gte('started_at', start.toISOString())
+        .lte('started_at', end.toISOString())
         .order('started_at', { ascending: false });
 
       if (error) throw error;
@@ -52,21 +86,34 @@ const Reports = () => {
         .select('id, full_name')
         .in('id', userIds);
 
-      // Load site names
+      // Load site names and expected start times
       const siteIds = [...new Set(shiftsData?.map(s => s.site_id) || [])];
       const { data: sites } = await supabase
         .from('sites')
-        .select('id, name')
+        .select('id, name, expected_start')
         .in('id', siteIds);
 
       const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]));
-      const siteMap = new Map(sites?.map(s => [s.id, s.name]));
+      const siteMap = new Map(sites?.map(s => [s.id, { name: s.name, expected_start: s.expected_start }]));
 
-      const enrichedShifts: ShiftReport[] = (shiftsData || []).map(shift => ({
-        ...shift,
-        user_name: profileMap.get(shift.user_id) || 'Неизвестно',
-        site_name: siteMap.get(shift.site_id) || 'Неизвестно',
-      }));
+      const enrichedShifts: ShiftReport[] = (shiftsData || [])
+        .filter(shift => shift.status !== 'offsite') // Filter out old offsite shifts
+        .map(shift => {
+          const siteInfo = siteMap.get(shift.site_id);
+          const earlyMinutes = siteInfo?.expected_start 
+            ? calculateEarlyMinutes(new Date(shift.started_at), siteInfo.expected_start)
+            : undefined;
+          
+          return {
+            ...shift,
+            status: shift.status as 'early' | 'on_time' | 'late',
+            user_name: profileMap.get(shift.user_id) || 'Неизвестно',
+            site_name: siteInfo?.name || 'Неизвестно',
+            expected_start: siteInfo?.expected_start,
+            early_minutes: earlyMinutes,
+            pause_history: Array.isArray(shift.pause_history) ? shift.pause_history : [],
+          };
+        });
 
       setShifts(enrichedShifts);
     } catch (error) {
@@ -79,14 +126,13 @@ const Reports = () => {
 
   useEffect(() => {
     loadShifts();
-  }, []);
+  }, [selectedPeriod, selectedDate]);
 
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'on_time': return 'Вовремя';
       case 'late': return 'Опоздание';
       case 'early': return 'Раньше';
-      case 'offsite': return 'Вне объекта';
       default: return status;
     }
   };
@@ -96,7 +142,6 @@ const Reports = () => {
       case 'on_time': return 'text-green-600';
       case 'late': return 'text-red-600';
       case 'early': return 'text-blue-600';
-      case 'offsite': return 'text-gray-600';
       default: return '';
     }
   };
@@ -117,7 +162,16 @@ const Reports = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 space-y-6">
+        <Card className="p-6">
+          <PeriodFilter
+            selectedPeriod={selectedPeriod}
+            selectedDate={selectedDate}
+            onPeriodChange={setSelectedPeriod}
+            onDateChange={setSelectedDate}
+          />
+        </Card>
+
         <Card className="p-6">
           {loading ? (
             <div className="flex justify-center py-12">
@@ -139,6 +193,8 @@ const Reports = () => {
                     <TableHead>Конец</TableHead>
                     <TableHead>Статус</TableHead>
                     <TableHead>Опоздание</TableHead>
+                    <TableHead>Раньше</TableHead>
+                    <TableHead>Паузы</TableHead>
                     <TableHead>Отработано</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -174,6 +230,22 @@ const Reports = () => {
                       </TableCell>
                       <TableCell>
                         {shift.minutes_late > 0 ? `${shift.minutes_late} мин` : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {shift.early_minutes && shift.early_minutes > 0 ? (
+                          <span className="text-blue-600 flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" />
+                            {shift.early_minutes} мин
+                          </span>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {shift.pause_history && shift.pause_history.length > 0 ? (
+                          <span className="text-amber-600 flex items-center gap-1">
+                            <Pause className="w-3 h-3" />
+                            {shift.pause_history.length} ({shift.total_paused_minutes || 0} мин)
+                          </span>
+                        ) : '-'}
                       </TableCell>
                       <TableCell>
                         {shift.minutes_worked 
