@@ -4,15 +4,27 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { db, Site } from '@/lib/db';
 import { ArrowLeft, MapPin, Plus, Trash2, Navigation } from 'lucide-react';
 import { toast } from 'sonner';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { getDistance } from '@/lib/geo';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Site {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  radius_m: number;
+  expected_start: string;
+  expected_end: string;
+  timezone: string;
+  active: boolean;
+  created_at: string;
+}
 
 const SitesManagement = () => {
   const navigate = useNavigate();
-  const sites = useLiveQuery(() => db.sites.toArray()) || [];
+  const [sites, setSites] = useState<Site[]>([]);
   
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,6 +39,8 @@ const SitesManagement = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
 
   useEffect(() => {
+    loadSites();
+    
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -42,6 +56,21 @@ const SitesManagement = () => {
     }
   }, []);
 
+  const loadSites = async () => {
+    const { data, error } = await supabase
+      .from('sites')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error loading sites:', error);
+      toast.error('Ошибка загрузки объектов');
+      return;
+    }
+    
+    setSites(data || []);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -54,17 +83,24 @@ const SitesManagement = () => {
       return;
     }
 
-    await db.sites.add({
-      name: formData.name,
-      lat,
-      lon,
-      radiusM,
-      expectedStart: formData.expectedStart,
-      expectedEnd: formData.expectedEnd,
-      tz: formData.tz,
-      active: true,
-      createdAt: new Date()
-    });
+    const { error } = await supabase
+      .from('sites')
+      .insert({
+        name: formData.name,
+        lat,
+        lon,
+        radius_m: radiusM,
+        expected_start: formData.expectedStart,
+        expected_end: formData.expectedEnd,
+        timezone: formData.tz,
+        active: true
+      });
+
+    if (error) {
+      console.error('Error adding site:', error);
+      toast.error('Ошибка добавления объекта');
+      return;
+    }
 
     toast.success('Объект добавлен');
     setShowForm(false);
@@ -77,11 +113,23 @@ const SitesManagement = () => {
       expectedEnd: '18:00',
       tz: 'Europe/Moscow'
     });
+    loadSites();
   };
 
-  const handleDelete = async (id: number) => {
-    await db.sites.delete(id);
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase
+      .from('sites')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting site:', error);
+      toast.error('Ошибка удаления объекта');
+      return;
+    }
+
     toast.success('Объект удалён');
+    loadSites();
   };
 
   const handleUseCurrentLocation = () => {
@@ -220,7 +268,7 @@ const SitesManagement = () => {
         <div className="space-y-4">
           {sites.map((site) => {
             const distance = getDistanceToSite(site);
-            const isNearby = distance !== null && distance <= site.radiusM;
+            const isNearby = distance !== null && distance <= site.radius_m;
 
             return (
               <Card key={site.id} className="p-6">
@@ -237,14 +285,14 @@ const SitesManagement = () => {
                     </div>
                     <div className="text-sm text-muted-foreground space-y-1">
                       <p>📍 {site.lat.toFixed(6)}, {site.lon.toFixed(6)}</p>
-                      <p>⭕ Радиус: {site.radiusM}м</p>
-                      <p>🕒 {site.expectedStart} - {site.expectedEnd}</p>
+                      <p>⭕ Радиус: {site.radius_m}м</p>
+                      <p>🕒 {site.expected_start} - {site.expected_end}</p>
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => site.id && handleDelete(site.id)}
+                    onClick={() => handleDelete(site.id)}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="w-4 h-4" />
