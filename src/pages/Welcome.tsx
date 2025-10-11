@@ -8,29 +8,8 @@ import { toast } from 'sonner';
 
 const Welcome = () => {
   const navigate = useNavigate();
-  const [isFirstLaunch, setIsFirstLaunch] = useState(true);
 
-  useEffect(() => {
-    // Initialize admin on first launch
-    const initializeAdmin = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('create-admin');
-        
-        if (error) {
-          console.error('Error creating admin:', error);
-        } else {
-          console.log('Admin initialization:', data);
-        }
-      } catch (error) {
-        console.error('Failed to initialize admin:', error);
-      }
-    };
-
-    initializeAdmin();
-  }, []);
-
-  const handleAdminSetup = async () => {
-    // Redirect to auth page
+  const handleLogin = () => {
     navigate('/auth');
   };
 
@@ -87,7 +66,7 @@ const Welcome = () => {
           <Button
             size="lg"
             className="w-full h-20 text-lg bg-gradient-to-br from-primary to-accent hover:shadow-lg transition-all"
-            onClick={handleAdminSetup}
+            onClick={handleLogin}
           >
             <div className="space-y-1">
               <Shield className="w-8 h-8 mx-auto" />
