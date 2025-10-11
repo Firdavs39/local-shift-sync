@@ -49,35 +49,46 @@ export async function loginWithCredentials(login: string, pin: string): Promise<
       };
     }
 
-    // For workers: find by full_name (as login) and PIN
-    const { data: profiles, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .ilike('full_name', login)
-      .eq('pin', pin)
-      .eq('active', true)
-      .limit(1);
+  // For workers: find by full_name (as login) and PIN
+  const { data: profiles, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .ilike('full_name', login)
+    .eq('pin', pin)
+    .eq('active', true)
+    .limit(1);
 
-    if (profileError || !profiles || profiles.length === 0) {
-      return null;
-    }
+  console.log('Profile search:', { login, pin, profiles, profileError });
 
-    const profile = profiles[0];
+  if (profileError || !profiles || profiles.length === 0) {
+    console.log('No profile found or error:', profileError);
+    return null;
+  }
 
-    // Use email from profile
-    if (!profile.email) {
-      return null;
-    }
-    
-    // Sign in with email from profile and password = fullName (no spaces) + PIN
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: profile.email,
-      password: `${profile.full_name.replace(/\s+/g, '')}${pin}`,
-    });
+  const profile = profiles[0];
+  console.log('Found profile:', profile);
 
-    if (error || !data.user) {
-      return null;
-    }
+  // Use email from profile
+  if (!profile.email) {
+    console.log('Profile has no email');
+    return null;
+  }
+  
+  // Sign in with email from profile and password = fullName (no spaces) + PIN
+  const password = `${profile.full_name.replace(/\s+/g, '')}${pin}`;
+  console.log('Attempting sign in with:', { email: profile.email, password });
+  
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: profile.email,
+    password,
+  });
+
+  console.log('Sign in result:', { data: !!data, error });
+
+  if (error || !data.user) {
+    console.error('Sign in failed:', error);
+    return null;
+  }
 
     // Get role
     const { data: roles, error: roleError } = await supabase
