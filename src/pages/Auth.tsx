@@ -14,6 +14,36 @@ const Auth = () => {
   const [login, setLogin] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
+  const handleUpdateAdminPassword = async () => {
+    setUpdatingPassword(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-admin-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('Пароль администратора обновлен!');
+      } else {
+        toast.error(data.error || 'Ошибка обновления пароля');
+      }
+    } catch (error) {
+      console.error('Error updating admin password:', error);
+      toast.error('Ошибка обновления пароля');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
 
   useEffect(() => {
     // Check if already logged in
@@ -102,7 +132,7 @@ const Auth = () => {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Для админа: "Admin", для сотрудников: имя из профиля
+              Для админа: "Администратор", для сотрудников: имя из профиля
             </p>
           </div>
 
@@ -135,12 +165,22 @@ const Auth = () => {
           </Button>
         </form>
 
-        <div className="text-center">
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUpdateAdminPassword}
+            disabled={updatingPassword}
+            className="w-full text-xs"
+          >
+            {updatingPassword ? 'Обновление...' : 'Обновить пароль администратора'}
+          </Button>
+          
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate('/welcome')}
-            className="text-xs"
+            className="w-full text-xs"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Назад

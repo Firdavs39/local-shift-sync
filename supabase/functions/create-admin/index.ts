@@ -41,7 +41,10 @@ serve(async (req) => {
 
     // Create admin user
     const email = 'admin777@geotime.local';
-    const password = '777777777'; // PIN repeated 3 times
+    const fullName = 'Администратор';
+    const pin = '777';
+    // Password format: full_name (no spaces) + PIN
+    const password = `${fullName.replace(/\s+/g, '')}${pin}`; // "Администратор777"
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
