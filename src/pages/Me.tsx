@@ -167,6 +167,13 @@ const Me = () => {
       // Check if within selected site radius
       const isWithinSite = isWithinRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m);
 
+      // Block shift start if not within radius
+      if (!isWithinSite) {
+        const distance = getDistance(latitude, longitude, selectedSite.lat, selectedSite.lon);
+        toast.error(`Вы находитесь вне радиуса объекта! Расстояние: ${Math.round(distance)}м (допустимо: ${selectedSite.radius_m}м)`);
+        return;
+      }
+
       const now = new Date();
       
       // Check if user already has shifts today
@@ -186,13 +193,13 @@ const Me = () => {
       let minutesLate = 0;
       
       if (isFirstShiftToday) {
-        status = getShiftStatus(now, selectedSite.expected_start, isWithinSite);
+        status = getShiftStatus(now, selectedSite.expected_start, true); // always within site here
         minutesLate = status === 'late' ? 
           parseInt(formatTime(now).split(':')[0]) * 60 + parseInt(formatTime(now).split(':')[1]) - 
           parseInt(selectedSite.expected_start.split(':')[0]) * 60 - parseInt(selectedSite.expected_start.split(':')[1]) : 0;
       } else {
         // Not first shift today - no late penalty
-        status = isWithinSite ? 'on_time' : 'offsite';
+        status = 'on_time';
         minutesLate = 0;
       }
 
