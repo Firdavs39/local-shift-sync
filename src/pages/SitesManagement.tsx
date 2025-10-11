@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, MapPin, Plus, Trash2, Navigation } from 'lucide-react';
+import { ArrowLeft, MapPin, Plus, Trash2, Navigation, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDistance } from '@/lib/geo';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,6 +54,36 @@ const SitesManagement = () => {
         }
       );
     }
+
+    // Auto-refresh on window focus
+    const handleFocus = () => {
+      console.log('Window focused - refreshing sites');
+      loadSites();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    // Set up real-time subscription for sites
+    const channel = supabase
+      .channel('sites-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'sites',
+        },
+        () => {
+          console.log('Sites table changed - refreshing');
+          loadSites();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadSites = async () => {
@@ -164,10 +194,15 @@ const SitesManagement = () => {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-semibold">Управление объектами</h1>
-          <Button onClick={() => setShowForm(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Добавить
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={loadSites}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Добавить
+            </Button>
+          </div>
         </div>
       </header>
 

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, Users, Plus, Trash2, Lock } from 'lucide-react';
+import { ArrowLeft, Users, Plus, Trash2, Lock, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface UserProfile {
@@ -30,6 +30,14 @@ const UsersManagement = () => {
   useEffect(() => {
     loadUsers();
 
+    // Auto-refresh on window focus
+    const handleFocus = () => {
+      console.log('Window focused - refreshing users');
+      loadUsers();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
     // Set up real-time subscription
     const channel = supabase
       .channel('users-changes')
@@ -41,12 +49,14 @@ const UsersManagement = () => {
           table: 'profiles',
         },
         () => {
+          console.log('Profiles table changed - refreshing');
           loadUsers();
         }
       )
       .subscribe();
 
     return () => {
+      window.removeEventListener('focus', handleFocus);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -208,10 +218,15 @@ const UsersManagement = () => {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-xl font-semibold">Управление пользователями</h1>
-          <Button onClick={() => setShowForm(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Добавить
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={loadUsers}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Добавить
+            </Button>
+          </div>
         </div>
       </header>
 
