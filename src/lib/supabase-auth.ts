@@ -84,14 +84,14 @@ export async function loginWithCredentials(login: string, pin: string): Promise<
   
   // Sign in with email from profile and password = fullName (no spaces) + PIN
   const password = `${profile.full_name.replace(/\s+/g, '')}${pin}`;
-  console.log('Attempting sign in with:', { email: profile.email, password });
+  console.log('Worker login attempt:', { email: profile.email, passwordLength: password.length });
   
   const { data, error } = await supabase.auth.signInWithPassword({
     email: profile.email,
     password,
   });
 
-  console.log('Sign in result:', { data: !!data, error });
+  console.log('Worker sign in result:', { success: !!data?.user, error: error?.message });
 
   if (error || !data.user) {
     console.error('Sign in failed:', error);
