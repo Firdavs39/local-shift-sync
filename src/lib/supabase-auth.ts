@@ -18,97 +18,36 @@ export interface UserWithRole {
 // Login with username (login) and PIN
 export async function loginWithCredentials(login: string, pin: string): Promise<UserWithRole | null> {
   try {
-    console.log('=== LOGIN START ===', { login, pin });
-    
-    // Special case for admin
-    if (login.toLowerCase() === 'admin' && pin === '777') {
-      console.log('Admin login detected');
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: 'admin777@geotime.local',
-        password: '777777777',
-      });
+    // Find user by full_name (case-insensitive) and PIN
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('active', true);
 
-      console.log('Admin auth result:', { success: !!data, error });
-
-      if (error || !data.user) {
-        console.error('Admin login failed:', error);
-        return null;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-
-      console.log('Admin profile:', { profile, profileError });
-
-      if (!profile) {
-        await supabase.auth.signOut();
-        return null;
-      }
-
-      return {
-        id: profile.id,
-        full_name: profile.full_name,
-        pin: profile.pin,
-        active: profile.active,
-        role: 'admin',
-      };
+    if (profileError || !profiles) {
+      return null;
     }
 
-  // For workers: find by full_name (as login) and PIN
-  const { data: profiles, error: profileError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('active', true);
+    // Find matching profile by full_name and PIN
+    const profile = profiles?.find(p => 
+      p.full_name.toLowerCase() === login.toLowerCase() && p.pin === pin
+    );
 
-  console.log('All active profiles:', profiles?.map(p => ({ name: p.full_name, pin: p.pin, hasEmail: !!p.email })));
+    if (!profile || !profile.email) {
+      return null;
+    }
+    
+    // Sign in with email from profile and password = fullName (no spaces) + PIN
+    const password = `${profile.full_name.replace(/\s+/g, '')}${pin}`;
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password,
+    });
 
-  // Find matching profile by full_name (case-insensitive) and PIN
-  const profile = profiles?.find(p => {
-    const nameMatch = p.full_name.toLowerCase() === login.toLowerCase();
-    const pinMatch = p.pin === pin;
-    console.log(`Checking profile ${p.full_name}: nameMatch=${nameMatch}, pinMatch=${pinMatch}, pin in DB="${p.pin}", pin entered="${pin}"`);
-    return nameMatch && pinMatch;
-  });
-
-  console.log('Profile search:', { login, pin, foundProfile: !!profile, profileError });
-
-  if (profileError || !profile) {
-    console.log('No profile found or error:', profileError);
-    return null;
-  }
-
-  console.log('Found profile:', profile);
-
-  // Use email from profile
-  if (!profile.email) {
-    console.log('Profile has no email');
-    return null;
-  }
-  
-  // Sign in with email from profile and password = fullName (no spaces) + PIN
-  const password = `${profile.full_name.replace(/\s+/g, '')}${pin}`;
-  console.log('Worker login attempt:', { 
-    email: profile.email, 
-    passwordLength: password.length,
-    password: password, // TEMPORARY - for debugging only
-    fullName: profile.full_name,
-    pin: pin
-  });
-  
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: profile.email,
-    password,
-  });
-
-  console.log('Worker sign in result:', { success: !!data?.user, error: error?.message, errorDetails: error });
-
-  if (error || !data.user) {
-    console.error('Sign in failed:', error);
-    return null;
-  }
+    if (error || !data.user) {
+      return null;
+    }
 
     // Get role
     const { data: roles, error: roleError } = await supabase
