@@ -8,6 +8,8 @@ import Me from "./pages/Me";
 import Admin from "./pages/Admin";
 import SitesManagement from "./pages/SitesManagement";
 import UsersManagement from "./pages/UsersManagement";
+import Reports from "./pages/Reports";
+import WorkerDetails from "./pages/WorkerDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,16 @@ function App() {
           <Route path="/admin/users" element={
             <ProtectedRoute requireAdmin>
               <UsersManagement />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/reports" element={
+            <ProtectedRoute requireAdmin>
+              <Reports />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/workers/:id" element={
+            <ProtectedRoute requireAdmin>
+              <WorkerDetails />
             </ProtectedRoute>
           } />
           <Route path="*" element={<NotFound />} />

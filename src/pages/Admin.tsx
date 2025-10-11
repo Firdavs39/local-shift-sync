@@ -112,7 +112,7 @@ const Admin = () => {
           </Card>
 
           {/* Reports */}
-          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group">
+          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate('/admin/reports')}>
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <FileBarChart className="w-7 h-7 text-white" />
             </div>
