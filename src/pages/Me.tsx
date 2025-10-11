@@ -45,6 +45,7 @@ const Me = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [sites, setSites] = useState<Site[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [selectedSite, setSelectedSite] = useState<Site | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -154,8 +155,8 @@ const Me = () => {
   };
 
   const handleStartShift = async () => {
-    if (!sites || sites.length === 0) {
-      toast.error('Нет доступных объектов');
+    if (!selectedSite) {
+      toast.error('Выберите объект для начала смены');
       return;
     }
 
@@ -163,33 +164,20 @@ const Me = () => {
       const position = await getCurrentPosition();
       const { latitude, longitude } = position.coords;
 
-      // Find nearest site
-      let nearestSite: Site | null = null;
-      let isWithinSite = false;
-
-      for (const site of sites) {
-        if (isWithinRadius(latitude, longitude, site.lat, site.lon, site.radius_m)) {
-          nearestSite = site;
-          isWithinSite = true;
-          break;
-        }
-      }
-
-      if (!nearestSite) {
-        nearestSite = sites[0]; // Default to first site if none found
-      }
+      // Check if within selected site radius
+      const isWithinSite = isWithinRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m);
 
       const now = new Date();
-      const status = getShiftStatus(now, nearestSite.expected_start, isWithinSite);
+      const status = getShiftStatus(now, selectedSite.expected_start, isWithinSite);
       const minutesLate = status === 'late' ? 
         parseInt(formatTime(now).split(':')[0]) * 60 + parseInt(formatTime(now).split(':')[1]) - 
-        parseInt(nearestSite.expected_start.split(':')[0]) * 60 - parseInt(nearestSite.expected_start.split(':')[1]) : 0;
+        parseInt(selectedSite.expected_start.split(':')[0]) * 60 - parseInt(selectedSite.expected_start.split(':')[1]) : 0;
 
       const { data, error } = await supabase
         .from('shifts')
         .insert({
           user_id: user.id,
-          site_id: nearestSite.id,
+          site_id: selectedSite.id,
           started_at: now.toISOString(),
           start_lat: latitude,
           start_lon: longitude,
@@ -204,7 +192,8 @@ const Me = () => {
         console.error(error);
       } else {
         setActiveShift(data);
-        toast.success(`Смена начата на объекте "${nearestSite.name}"`);
+        setSelectedSite(null);
+        toast.success(`Смена начата на объекте "${selectedSite.name}"`);
       }
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
@@ -330,17 +319,66 @@ const Me = () => {
         ) : (
           <Card className="p-6 space-y-4">
             <h2 className="text-lg font-semibold">Начать смену</h2>
-            <p className="text-sm text-muted-foreground">
-              При начале смены будет определена ваша геолокация и ближайший объект
+            <p className="text-sm text-muted-foreground mb-4">
+              Выберите объект из списка ниже, затем нажмите "Начать смену"
             </p>
-            <Button
-              onClick={handleStartShift}
-              className="w-full bg-gradient-to-r from-primary to-accent"
-              size="lg"
-            >
-              <Play className="w-5 h-5 mr-2" />
-              Начать смену
-            </Button>
+            
+            {sites.length > 0 ? (
+              <>
+                <div className="space-y-2 mb-4">
+                  {sites.map((site) => {
+                    const distance = getSiteDistance(site);
+                    const isSelected = selectedSite?.id === site.id;
+                    return (
+                      <button
+                        key={site.id}
+                        onClick={() => setSelectedSite(site)}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                          isSelected 
+                            ? 'border-primary bg-primary/10' 
+                            : 'border-border hover:border-primary/50 bg-card'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-medium">{site.name}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Время: {site.expected_start} - {site.expected_end}
+                            </div>
+                            {distance !== null && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                📍 {distance}м от вас
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            ±{site.radius_m}м
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <Button
+                  onClick={handleStartShift}
+                  disabled={!selectedSite}
+                  className="w-full bg-gradient-to-r from-primary to-accent"
+                  size="lg"
+                >
+                  <Play className="w-5 h-5 mr-2" />
+                  {selectedSite ? `Начать смену на "${selectedSite.name}"` : 'Выберите объект'}
+                </Button>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <MapPin className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Нет доступных объектов</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Администратор ещё не добавил объекты
+                </p>
+              </div>
+            )}
           </Card>
         )}
 
@@ -364,48 +402,6 @@ const Me = () => {
           </div>
         </Card>
 
-        {/* Sites Info */}
-        {sites && sites.length > 0 && (
-          <Card className="p-6 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <MapPin className="w-5 h-5" />
-              Доступные объекты
-            </h2>
-            <div className="space-y-3">
-              {sites.map((site) => {
-                const distance = getSiteDistance(site);
-                return (
-                  <div key={site.id} className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
-                    <div>
-                      <div className="font-medium">{site.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {site.expected_start} - {site.expected_end}
-                      </div>
-                      {distance !== null && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          📍 {distance}м от вас
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      ±{site.radius_m}м
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-
-        {sites.length === 0 && (
-          <Card className="p-6 text-center">
-            <MapPin className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Нет доступных объектов</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Администратор ещё не добавил объекты
-            </p>
-          </Card>
-        )}
       </main>
     </div>
   );
