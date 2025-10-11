@@ -50,10 +50,11 @@ serve(async (req) => {
       throw new Error('Пользователь с таким именем уже существует');
     }
 
-    // Create unique email and password for worker
-    const timestamp = Date.now();
-    const email = `worker${timestamp}@geotime.local`;
-    const password = `${fullName.replace(/\s+/g, '')}${pin}`; // name + pin as password
+    // Create email and password for worker
+    // Email: name without spaces + @geotime.local (e.g., "artur@geotime.local")
+    // Password: name without spaces + PIN (e.g., "Artur333")
+    const email = `${fullName.toLowerCase().replace(/\s+/g, '')}@geotime.local`;
+    const password = `${fullName.replace(/\s+/g, '')}${pin}`;
 
     // Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
