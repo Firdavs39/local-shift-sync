@@ -67,11 +67,13 @@ export type Database = {
       }
       shifts: {
         Row: {
+          auto_ended: boolean | null
           created_at: string
           end_lat: number | null
           end_lon: number | null
           ended_at: string | null
           id: string
+          is_overtime: boolean | null
           is_paused: boolean | null
           minutes_late: number
           minutes_worked: number | null
@@ -86,11 +88,13 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          auto_ended?: boolean | null
           created_at?: string
           end_lat?: number | null
           end_lon?: number | null
           ended_at?: string | null
           id?: string
+          is_overtime?: boolean | null
           is_paused?: boolean | null
           minutes_late?: number
           minutes_worked?: number | null
@@ -105,11 +109,13 @@ export type Database = {
           user_id: string
         }
         Update: {
+          auto_ended?: boolean | null
           created_at?: string
           end_lat?: number | null
           end_lon?: number | null
           ended_at?: string | null
           id?: string
+          is_overtime?: boolean | null
           is_paused?: boolean | null
           minutes_late?: number
           minutes_worked?: number | null

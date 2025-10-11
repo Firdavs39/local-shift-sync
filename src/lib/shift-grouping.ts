@@ -19,6 +19,8 @@ export interface GroupedShift {
   is_grouped: boolean; // Флаг что это группа смен
   shift_segments: ShiftSegment[]; // Детали каждой смены в группе
   auto_pauses: AutoPause[]; // Автопаузы между сменами
+  auto_ended?: boolean;
+  is_overtime?: boolean;
 }
 
 export interface ShiftSegment {
@@ -51,6 +53,8 @@ interface BaseShift {
   pause_history?: any[];
   total_paused_minutes?: number;
   expected_start?: string;
+  auto_ended?: boolean;
+  is_overtime?: boolean;
 }
 
 /**
@@ -85,7 +89,12 @@ export function groupShiftsByWorkerSiteDay(shifts: BaseShift[]): GroupedShift[] 
       const nextDate = new Date(nextShift.started_at).toDateString();
       const nextKey = `${nextShift.user_id}_${nextShift.site_id}_${nextDate}`;
 
+      // Don't group if current shift was auto_ended and next is overtime
       if (nextKey === groupKey && !processed.has(nextShift.id)) {
+        const lastInGroup = groupShifts[groupShifts.length - 1];
+        if (lastInGroup.auto_ended && nextShift.is_overtime) {
+          break; // Stop grouping - overtime shift starts a new group
+        }
         groupShifts.push(nextShift);
         processed.add(nextShift.id);
       }
@@ -111,6 +120,8 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
       is_grouped: false,
       shift_segments: [],
       auto_pauses: [],
+      auto_ended: shift.auto_ended,
+      is_overtime: shift.is_overtime,
     };
   }
 
@@ -196,5 +207,7 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     is_grouped: true,
     shift_segments: shiftSegments,
     auto_pauses: autoPauses,
+    auto_ended: lastShift.auto_ended,
+    is_overtime: firstShift.is_overtime,
   };
 }

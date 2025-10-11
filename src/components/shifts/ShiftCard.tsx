@@ -5,7 +5,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { MapPin, Clock, Pause, TrendingUp, TrendingDown, CheckCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { MapPin, Clock, Pause, TrendingUp, TrendingDown, CheckCircle, Bot, Zap } from 'lucide-react';
 import { formatTime } from '@/lib/time';
 
 interface PauseEvent {
@@ -26,6 +28,8 @@ interface ShiftCardProps {
     total_paused_minutes?: number;
     early_minutes?: number;
     pause_events: PauseEvent[];
+    auto_ended?: boolean;
+    is_overtime?: boolean;
   };
 }
 
@@ -67,31 +71,48 @@ export function ShiftCard({ shift }: ShiftCardProps) {
   const StatusIcon = statusInfo.icon;
 
   return (
-    <Card className="overflow-hidden">
-      <Accordion type="single" collapsible>
-        <AccordionItem value="details" className="border-0">
-          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/5">
-            <div className="flex items-center gap-3 w-full text-left">
-              <div className={cn('p-2 rounded-lg', statusInfo.bg)}>
-                <StatusIcon className={cn('w-5 h-5', statusInfo.color)} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <span className="font-medium truncate">{shift.site_name}</span>
+    <TooltipProvider>
+      <Card className="overflow-hidden">
+        <Accordion type="single" collapsible>
+          <AccordionItem value="details" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/5">
+              <div className="flex items-center gap-3 w-full text-left">
+                <div className={cn('p-2 rounded-lg', statusInfo.bg)}>
+                  <StatusIcon className={cn('w-5 h-5', statusInfo.color)} />
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  {formatTime(new Date(shift.started_at))}
-                  {shift.ended_at && ` - ${formatTime(new Date(shift.ended_at))}`}
-                  {shift.minutes_worked !== undefined && (
-                    <span className="ml-2">
-                      ({Math.floor(shift.minutes_worked / 60)}ч {shift.minutes_worked % 60}м)
-                    </span>
-                  )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <span className="font-medium truncate">{shift.site_name}</span>
+                    {shift.is_overtime && (
+                      <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 text-xs">
+                        <Zap className="w-3 h-3 mr-1" />
+                        Переработка
+                      </Badge>
+                    )}
+                    {shift.auto_ended && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Bot className="w-4 h-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Смена завершена автоматически
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {formatTime(new Date(shift.started_at))}
+                    {shift.ended_at && ` - ${formatTime(new Date(shift.ended_at))}`}
+                    {shift.minutes_worked !== undefined && (
+                      <span className="ml-2">
+                        ({Math.floor(shift.minutes_worked / 60)}ч {shift.minutes_worked % 60}м)
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </AccordionTrigger>
+            </AccordionTrigger>
 
           <AccordionContent className="px-4 pb-4">
             <div className="space-y-3 pt-2">
@@ -177,6 +198,7 @@ export function ShiftCard({ shift }: ShiftCardProps) {
         </AccordionItem>
       </Accordion>
     </Card>
+    </TooltipProvider>
   );
 }
 

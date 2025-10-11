@@ -38,6 +38,8 @@ interface Shift {
   paused_at?: string;
   total_paused_minutes?: number;
   pause_history?: any;
+  auto_ended?: boolean;
+  is_overtime?: boolean;
 }
 
 const Me = () => {
@@ -124,12 +126,23 @@ const Me = () => {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
           table: 'shifts',
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
+        (payload) => {
+          const updatedShift = payload.new as Shift;
+          
+          // Show notification if shift was auto-ended
+          if (updatedShift.auto_ended && updatedShift.ended_at) {
+            const minutesWorked = updatedShift.minutes_worked || 0;
+            toast.success('✅ Смена завершена автоматически', {
+              description: `Отработано: ${Math.floor(minutesWorked / 60)}ч ${minutesWorked % 60}м`,
+              duration: 10000,
+            });
+          }
+          
           loadActiveShift();
         }
       )
@@ -238,6 +251,19 @@ const Me = () => {
     }
 
     try {
+      // Check if user has any active shift
+      const { data: activeShifts } = await supabase
+        .from('shifts')
+        .select('id, site_id')
+        .eq('user_id', user.id)
+        .is('ended_at', null)
+        .limit(1);
+
+      if (activeShifts && activeShifts.length > 0) {
+        toast.error('Завершите текущую смену перед началом новой!');
+        return;
+      }
+
       const position = await getCurrentPosition();
       const { latitude, longitude } = position.coords;
 
@@ -253,29 +279,48 @@ const Me = () => {
 
       const now = new Date();
       
-      // Check if user already has shifts today
+      // Parse expected_end time
+      const [endHours, endMinutes] = selectedSite.expected_end.split(':').map(Number);
+      const expectedEndTime = new Date(now);
+      expectedEndTime.setHours(endHours, endMinutes, 0, 0);
+      
+      // Check if starting after expected_end (overtime)
+      const isAfterExpectedEnd = now > expectedEndTime;
+      
+      // Check if user already has shifts today on this site
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       
       const { data: todayShifts } = await supabase
         .from('shifts')
-        .select('id')
+        .select('id, is_overtime')
         .eq('user_id', user.id)
+        .eq('site_id', selectedSite.id)
         .gte('started_at', startOfToday.toISOString());
       
       const isFirstShiftToday = !todayShifts || todayShifts.length === 0;
       
-      // Calculate status and late minutes only for first shift of the day
       let status: 'early' | 'on_time' | 'late' | 'offsite';
       let minutesLate = 0;
+      let isOvertime = false;
       
-      if (isFirstShiftToday) {
-        status = getShiftStatus(now, selectedSite.expected_start, true); // always within site here
+      if (isAfterExpectedEnd) {
+        // After expected_end - this is overtime
+        isOvertime = true;
+        status = 'on_time';
+        minutesLate = 0;
+        
+        toast.info('⚡ Начата сверхурочная смена (переработка)', {
+          description: `Смена начата после ${selectedSite.expected_end}`,
+        });
+      } else if (isFirstShiftToday) {
+        // First shift of the day within working hours
+        status = getShiftStatus(now, selectedSite.expected_start, true);
         minutesLate = status === 'late' ? 
           parseInt(formatTime(now).split(':')[0]) * 60 + parseInt(formatTime(now).split(':')[1]) - 
           parseInt(selectedSite.expected_start.split(':')[0]) * 60 - parseInt(selectedSite.expected_start.split(':')[1]) : 0;
       } else {
-        // Not first shift today - no late penalty
+        // Repeat shift within working hours (before expected_end)
         status = 'on_time';
         minutesLate = 0;
       }
@@ -290,6 +335,8 @@ const Me = () => {
           start_lon: longitude,
           status,
           minutes_late: minutesLate,
+          is_overtime: isOvertime,
+          auto_ended: false,
         })
         .select()
         .single();
@@ -300,7 +347,7 @@ const Me = () => {
       } else {
         setActiveShift(data);
         setSelectedSite(null);
-        toast.success(`Смена начата на объекте "${selectedSite.name}"`);
+        toast.success(`Смена начата на объекте "${selectedSite.name}"${isOvertime ? ' (переработка)' : ''}`);
       }
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
@@ -425,6 +472,14 @@ const Me = () => {
               <div className={`w-3 h-3 rounded-full ${activeShift.is_paused ? 'bg-yellow-500' : 'bg-accent'} animate-pulse`} />
               <h2 className="text-lg font-semibold">{activeShift.is_paused ? 'Смена на паузе' : 'Смена идёт'}</h2>
             </div>
+
+            {activeShift.is_overtime && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-2">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500 font-medium">
+                  ⚡ Сверхурочная работа (переработка)
+                </div>
+              </div>
+            )}
             
             {activeShift.is_paused && (
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-500">

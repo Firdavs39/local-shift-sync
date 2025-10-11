@@ -1,12 +1,14 @@
 import { Card } from '@/components/ui/card';
-import { Clock, TrendingUp, TrendingDown, Pause, Briefcase, MapPin } from 'lucide-react';
+import { Clock, TrendingUp, TrendingDown, Pause, Briefcase, MapPin, Zap } from 'lucide-react';
 
 interface PeriodStatsProps {
   totalWorkedMinutes: number;
   totalLateMinutes: number;
   totalEarlyMinutes: number;
   totalPausedMinutes: number;
+  totalOvertimeMinutes?: number;
   shiftsCount: number;
+  overtimeShiftsCount?: number;
   sitesWorked: string[];
 }
 
@@ -15,7 +17,9 @@ export function PeriodStats({
   totalLateMinutes,
   totalEarlyMinutes,
   totalPausedMinutes,
+  totalOvertimeMinutes = 0,
   shiftsCount,
+  overtimeShiftsCount = 0,
   sitesWorked,
 }: PeriodStatsProps) {
   const formatHoursMinutes = (minutes: number) => {
@@ -57,6 +61,15 @@ export function PeriodStats({
     },
   ];
 
+  if (totalOvertimeMinutes > 0) {
+    stats.push({
+      icon: Zap,
+      label: 'Переработка',
+      value: formatHoursMinutes(totalOvertimeMinutes),
+      color: 'text-amber-500',
+    });
+  }
+
   return (
     <div className="space-y-4">
       <Card className="p-6">
@@ -71,6 +84,11 @@ export function PeriodStats({
               <div className={cn('text-2xl font-bold', stat.color)}>
                 {stat.value}
               </div>
+              {stat.label === 'Переработка' && overtimeShiftsCount > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {overtimeShiftsCount} смен(ы)
+                </p>
+              )}
             </div>
           ))}
         </div>

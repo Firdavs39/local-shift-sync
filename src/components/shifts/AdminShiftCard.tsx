@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/card';
-import { Clock, MapPin, TrendingDown, TrendingUp, Pause, PlayCircle, Calendar, RefreshCw } from 'lucide-react';
+import { Clock, MapPin, TrendingDown, TrendingUp, Pause, PlayCircle, Calendar, RefreshCw, Bot, Zap } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { formatTime, formatDate } from '@/lib/time';
 import { GroupedShift } from '@/lib/shift-grouping';
 import {
@@ -37,27 +38,44 @@ export function AdminShiftCard({ shift }: AdminShiftCardProps) {
   const hasPauses = manualPauses.length > 0 || autoPauses.length > 0;
 
   return (
-    <Accordion type="single" collapsible className="w-full">
-      <AccordionItem value={shift.id} className="border rounded-lg">
-        <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/50">
-          <div className="flex items-center justify-between w-full pr-4">
-            <div className="flex items-center gap-3">
-              <StatusIcon className={`w-5 h-5 ${statusInfo.color}`} />
-              <div className="text-left">
-                <div className="font-medium flex items-center gap-2">
-                  {shift.site_name}
-                  {shift.is_grouped && (
-                    <Badge variant="secondary" className="text-xs">
-                      <RefreshCw className="w-3 h-3 mr-1" />
-                      {shift.shift_segments.length}
-                    </Badge>
+    <TooltipProvider>
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem value={shift.id} className="border rounded-lg">
+          <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/50">
+            <div className="flex items-center justify-between w-full pr-4">
+              <div className="flex items-center gap-3">
+                <StatusIcon className={`w-5 h-5 ${statusInfo.color}`} />
+                <div className="text-left">
+                  <div className="font-medium flex items-center gap-2 flex-wrap">
+                    {shift.site_name}
+                    {shift.is_grouped && (
+                      <Badge variant="secondary" className="text-xs">
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        {shift.shift_segments.length}
+                      </Badge>
+                    )}
+                    {shift.is_overtime && (
+                      <Badge variant="secondary" className="text-xs bg-amber-500/10 text-amber-600">
+                        <Zap className="w-3 h-3 mr-1" />
+                        Переработка
+                      </Badge>
+                    )}
+                    {shift.auto_ended && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Bot className="w-4 h-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Смена завершена автоматически
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                  {shift.user_name && (
+                    <div className="text-sm text-muted-foreground">{shift.user_name}</div>
                   )}
                 </div>
-                {shift.user_name && (
-                  <div className="text-sm text-muted-foreground">{shift.user_name}</div>
-                )}
               </div>
-            </div>
             <div className="flex items-center gap-4 text-sm">
               <span className={statusInfo.color}>{statusInfo.label}</span>
               {hasPauses && (
@@ -239,5 +257,6 @@ export function AdminShiftCard({ shift }: AdminShiftCardProps) {
         </AccordionContent>
       </AccordionItem>
     </Accordion>
+    </TooltipProvider>
   );
 }
