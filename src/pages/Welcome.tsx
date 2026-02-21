@@ -309,7 +309,7 @@ const Welcome = () => {
             <Button size="lg" className="h-12 px-7 text-base font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200" onClick={() => navigate('/register')}>
               {t.hero.cta1} <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
-            <Button size="lg" variant="outline" className="h-12 px-7 text-base border-gray-200 hover:bg-gray-50" onClick={() => navigate('/auth')}>
+            <Button size="lg" variant="outline" className="h-12 px-7 text-base border-gray-200 text-gray-800 hover:bg-gray-50 hover:text-gray-900" onClick={() => navigate('/auth')}>
               {t.hero.cta2}
             </Button>
           </div>
@@ -468,7 +468,7 @@ const Welcome = () => {
                   </ul>
                   <div className="space-y-2">
                     <Button
-                      className={`w-full text-sm h-10 ${popular ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200' : 'border-gray-200'}`}
+                      className={`w-full text-sm h-10 ${popular ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200 text-white' : 'border-gray-200 text-gray-800 hover:bg-gray-50 hover:text-gray-900'}`}
                       variant={popular ? 'default' : 'outline'}
                       onClick={() => navigate('/register')}
                     >
@@ -507,10 +507,10 @@ const Welcome = () => {
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-3 whitespace-pre-line">{t.cta.title}</h2>
           <p className="text-violet-200 text-sm sm:text-base mb-8">{t.cta.sub}</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" className="h-12 px-6 text-sm font-semibold bg-white text-violet-700 hover:bg-violet-50" onClick={() => navigate('/register')}>
+            <Button size="lg" className="h-12 px-6 text-sm font-semibold bg-white text-violet-700 hover:bg-violet-50 hover:text-violet-700" onClick={() => navigate('/register')}>
               {t.cta.btn1} <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
-            <Button size="lg" variant="outline" className="h-12 px-6 text-sm border-white/40 text-white hover:bg-white/10" onClick={() => window.open(CONTACT_TELEGRAM, '_blank')}>
+            <Button size="lg" variant="outline" className="h-12 px-6 text-sm border-white/40 text-white bg-transparent hover:bg-white/10 hover:text-white hover:border-white/60" onClick={() => window.open(CONTACT_TELEGRAM, '_blank')}>
               <MessageCircle className="w-4 h-4 mr-2" />{t.cta.btn2}
             </Button>
           </div>
