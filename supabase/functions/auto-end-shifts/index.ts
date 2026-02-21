@@ -67,10 +67,21 @@ serve(async (req) => {
 
         // Parse expected_end time (format: "HH:MM:SS" or "HH:MM")
         const [endHours, endMinutes] = site.expected_end.split(':').map(Number);
-        
-        // Create expected end time in UTC for comparison
-        const expectedEndTime = new Date(shift.started_at);
-        expectedEndTime.setHours(endHours, endMinutes, 0, 0);
+
+        // Convert expected_end from site's local timezone to UTC.
+        // Strategy: get "now" as a local string in the site timezone,
+        // build a local Date with the expected_end hours, then compute
+        // the UTC equivalent via the timezone offset trick.
+        const siteTimezone = site.timezone || 'UTC';
+        // Represent "now" as if it were local time (but parsed as UTC)
+        const nowAsLocal = new Date(now.toLocaleString('en-US', { timeZone: siteTimezone }));
+        // The offset between real UTC and the site-local "fake UTC"
+        const tzOffsetMs = now.getTime() - nowAsLocal.getTime();
+        // Build the expected end at today's date in site-local coordinates
+        const expectedEndLocal = new Date(nowAsLocal);
+        expectedEndLocal.setHours(endHours, endMinutes, 0, 0);
+        // Convert back to real UTC
+        const expectedEndTime = new Date(expectedEndLocal.getTime() + tzOffsetMs);
 
         // Check if current time is past expected_end
         if (now >= expectedEndTime) {

@@ -1,6 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Welcome from "./pages/Welcome";
 import Auth from "./pages/Auth";
@@ -11,6 +11,11 @@ import UsersManagement from "./pages/UsersManagement";
 import Reports from "./pages/Reports";
 import WorkerDetails from "./pages/WorkerDetails";
 import MyShifts from "./pages/MyShifts";
+import Settings from "./pages/Settings";
+import Register from "./pages/Register";
+import Billing from "./pages/Billing";
+import TelegramSettings from "./pages/TelegramSettings";
+import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,9 +26,13 @@ function App() {
       <BrowserRouter>
         <Toaster />
         <Routes>
-          <Route path="/" element={<Navigate to="/welcome" replace />} />
+          {/* Public */}
+          <Route path="/" element={<Welcome />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* Worker */}
           <Route path="/me" element={
             <ProtectedRoute>
               <Me />
@@ -34,6 +43,8 @@ function App() {
               <MyShifts />
             </ProtectedRoute>
           } />
+
+          {/* Admin */}
           <Route path="/admin" element={
             <ProtectedRoute requireAdmin>
               <Admin />
@@ -59,6 +70,25 @@ function App() {
               <WorkerDetails />
             </ProtectedRoute>
           } />
+          <Route path="/admin/settings" element={
+            <ProtectedRoute requireAdmin>
+              <Settings />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/billing" element={
+            <ProtectedRoute requireAdmin>
+              <Billing />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/telegram" element={
+            <ProtectedRoute requireAdmin>
+              <TelegramSettings />
+            </ProtectedRoute>
+          } />
+
+          {/* Platform super-admin (password protected inside the page) */}
+          <Route path="/super" element={<SuperAdmin />} />
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -41,7 +41,6 @@ const UsersManagement = () => {
 
     // Auto-refresh on window focus
     const handleFocus = () => {
-      console.log('Window focused - refreshing users');
       loadUsers();
     };
 
@@ -58,7 +57,6 @@ const UsersManagement = () => {
           table: 'profiles',
         },
         () => {
-          console.log('Profiles table changed - refreshing');
           loadUsers();
         }
       )
@@ -105,8 +103,8 @@ const UsersManagement = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (formData.pin.length !== 3) {
-      toast.error('PIN должен быть 3 цифры');
+    if (formData.pin.length !== 4) {
+      toast.error('PIN должен быть 4 цифры');
       return;
     }
 
@@ -150,7 +148,7 @@ const UsersManagement = () => {
       if (errorMessage.includes('уже существует')) {
         toast.error(errorMessage);
       } else if (errorMessage.includes('PIN must be')) {
-        toast.error('PIN должен состоять из 3 цифр');
+        toast.error('PIN должен состоять из 4 цифр');
       } else if (errorMessage.includes('Missing required fields')) {
         toast.error('Заполните все обязательные поля');
       } else {
@@ -238,8 +236,8 @@ const UsersManagement = () => {
     e.preventDefault();
     if (!editData) return;
 
-    if (editData.pin.length !== 3) {
-      toast.error('PIN должен быть 3 цифры');
+    if (editData.pin.length !== 4) {
+      toast.error('PIN должен быть 4 цифры');
       return;
     }
 
@@ -250,24 +248,18 @@ const UsersManagement = () => {
 
     setLoading(true);
     try {
-      // Update profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: editData.fullName.trim(),
-          pin: editData.pin
-        })
-        .eq('id', editData.userId);
+      // Use edge function to update both auth credentials and profile atomically
+      const { data, error } = await supabase.functions.invoke('update-worker', {
+        body: {
+          userId: editData.userId,
+          fullName: editData.fullName.trim(),
+          pin: editData.pin,
+          role: editData.role,
+        },
+      });
 
-      if (profileError) throw profileError;
-
-      // Update role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .update({ role: editData.role })
-        .eq('user_id', editData.userId);
-
-      if (roleError) throw roleError;
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Данные обновлены');
       cancelEdit();
@@ -319,7 +311,7 @@ const UsersManagement = () => {
               </div>
 
               <div>
-                <Label>PIN-код (3 цифры)</Label>
+                <Label>PIN-код (4 цифры)</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -327,12 +319,12 @@ const UsersManagement = () => {
                     inputMode="numeric"
                     value={formData.pin}
                     onChange={(e) => {
-                      const numbers = e.target.value.replace(/\D/g, '').slice(0, 3);
+                      const numbers = e.target.value.replace(/\D/g, '').slice(0, 4);
                       setFormData({ ...formData, pin: numbers });
                     }}
                     placeholder="•••"
                     className="pl-10 text-center tracking-widest"
-                    maxLength={3}
+                    maxLength={4}
                     required
                   />
                 </div>
@@ -387,7 +379,7 @@ const UsersManagement = () => {
                   </div>
 
                   <div>
-                    <Label>PIN-код (3 цифры)</Label>
+                    <Label>PIN-код (4 цифры)</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
@@ -395,12 +387,12 @@ const UsersManagement = () => {
                         inputMode="numeric"
                         value={editData.pin}
                         onChange={(e) => {
-                          const numbers = e.target.value.replace(/\D/g, '').slice(0, 3);
+                          const numbers = e.target.value.replace(/\D/g, '').slice(0, 4);
                           setEditData({ ...editData, pin: numbers });
                         }}
                         placeholder="•••"
                         className="pl-10 text-center tracking-widest"
-                        maxLength={3}
+                        maxLength={4}
                         required
                       />
                     </div>
@@ -470,7 +462,7 @@ const UsersManagement = () => {
                     >
                       {user.active ? 'Деактивировать' : 'Активировать'}
                     </Button>
-                    {user.pin !== '777' && (
+                    {user.role !== 'admin' && (
                       <Button
                         variant="ghost"
                         size="icon"

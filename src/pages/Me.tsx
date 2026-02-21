@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, isWithinRadius, getDistance } from '@/lib/geo';
-import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked } from '@/lib/time';
+import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate } from '@/lib/time';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -52,6 +52,7 @@ const Me = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -112,9 +113,14 @@ const Me = () => {
           lat: position.coords.latitude,
           lon: position.coords.longitude,
         });
+        setLocationDenied(false);
       })
-      .catch(error => {
+      .catch((error: GeolocationPositionError) => {
         console.error('Error getting location:', error);
+        if (error.code === 1) {
+          // PERMISSION_DENIED
+          setLocationDenied(true);
+        }
       });
 
     loadSites();
@@ -316,9 +322,7 @@ const Me = () => {
       } else if (isFirstShiftToday) {
         // First shift of the day within working hours
         status = getShiftStatus(now, selectedSite.expected_start, true);
-        minutesLate = status === 'late' ? 
-          parseInt(formatTime(now).split(':')[0]) * 60 + parseInt(formatTime(now).split(':')[1]) - 
-          parseInt(selectedSite.expected_start.split(':')[0]) * 60 - parseInt(selectedSite.expected_start.split(':')[1]) : 0;
+        minutesLate = status === 'late' ? getMinutesLate(now, selectedSite.expected_start) : 0;
       } else {
         // Repeat shift within working hours (before expected_end)
         status = 'on_time';
@@ -337,6 +341,7 @@ const Me = () => {
           minutes_late: minutesLate,
           is_overtime: isOvertime,
           auto_ended: false,
+          company_id: user.company_id,
         })
         .select()
         .single();
@@ -447,6 +452,21 @@ const Me = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 space-y-6">
+        {/* Geolocation denied warning */}
+        {locationDenied && (
+          <Card className="p-4 border-destructive bg-destructive/5">
+            <div className="flex items-start gap-3">
+              <MapPin className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-destructive text-sm">Геолокация отключена</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Для начала смены разрешите доступ к геолокации в настройках браузера и обновите страницу.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Current Time */}
         <Card className="p-6 text-center">
           <Clock className="w-12 h-12 mx-auto mb-4 text-primary" />

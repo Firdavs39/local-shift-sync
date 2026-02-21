@@ -57,7 +57,6 @@ const SitesManagement = () => {
 
     // Auto-refresh on window focus
     const handleFocus = () => {
-      console.log('Window focused - refreshing sites');
       loadSites();
     };
 
@@ -74,7 +73,6 @@ const SitesManagement = () => {
           table: 'sites',
         },
         () => {
-          console.log('Sites table changed - refreshing');
           loadSites();
         }
       )
@@ -103,13 +101,19 @@ const SitesManagement = () => {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     const lat = parseFloat(formData.lat);
     const lon = parseFloat(formData.lon);
     const radiusM = parseInt(formData.radiusM);
 
     if (isNaN(lat) || isNaN(lon) || isNaN(radiusM)) {
       toast.error('Неверные координаты или радиус');
+      return;
+    }
+
+    const { data: companyId, error: companyErr } = await supabase.rpc('get_my_company_id');
+    if (companyErr || !companyId) {
+      toast.error('Не удалось определить компанию');
       return;
     }
 
@@ -123,7 +127,8 @@ const SitesManagement = () => {
         expected_start: formData.expectedStart,
         expected_end: formData.expectedEnd,
         timezone: formData.tz,
-        active: true
+        active: true,
+        company_id: companyId,
       });
 
     if (error) {

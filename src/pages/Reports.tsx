@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, RefreshCw, Users, Pause, TrendingUp } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Users, Pause, TrendingUp, Download } from 'lucide-react';
+import { exportShiftsToCSV } from '@/lib/csv-export';
 import { formatTime, formatDate, calculateEarlyMinutes } from '@/lib/time';
 import { toast } from 'sonner';
 import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
@@ -28,12 +29,15 @@ interface ShiftReport {
   expected_start?: string;
 }
 
+const PAGE_SIZE = 50;
+
 const Reports = () => {
   const navigate = useNavigate();
   const [shifts, setShifts] = useState<GroupedShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [page, setPage] = useState(1);
 
   const getPeriodRange = () => {
     switch (selectedPeriod) {
@@ -128,6 +132,7 @@ const Reports = () => {
   };
 
   useEffect(() => {
+    setPage(1);
     loadShifts();
   }, [selectedPeriod, selectedDate]);
 
@@ -159,9 +164,20 @@ const Reports = () => {
             </Button>
             <h1 className="text-xl font-semibold">Отчёты по сменам</h1>
           </div>
-          <Button variant="outline" size="icon" onClick={loadShifts} disabled={loading}>
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportShiftsToCSV(shifts, 'shifts-export.csv')}
+              disabled={shifts.length === 0}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Экспорт CSV
+            </Button>
+            <Button variant="outline" size="icon" onClick={loadShifts} disabled={loading}>
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -186,94 +202,131 @@ const Reports = () => {
               <p className="text-muted-foreground">Нет данных о сменах</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Сотрудник</TableHead>
-                    <TableHead>Объект</TableHead>
-                    <TableHead>Начало</TableHead>
-                    <TableHead>Конец</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Опоздание</TableHead>
-                    <TableHead>Раньше</TableHead>
-                    <TableHead>Паузы</TableHead>
-                    <TableHead>Отработано</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {shifts.map((shift) => (
-                    <TableRow 
-                      key={shift.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/admin/workers/${shift.user_id}`)}
-                    >
-                      <TableCell className="font-medium">
-                        {shift.user_name}
-                        {shift.is_grouped && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            🔄 {shift.shift_segments.length} смен(ы)
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{shift.site_name}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{formatDate(new Date(shift.started_at))}</div>
-                          <div className="text-muted-foreground">{formatTime(new Date(shift.started_at))}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {shift.ended_at ? (
-                          <div className="text-sm">
-                            <div>{formatDate(new Date(shift.ended_at))}</div>
-                            <div className="text-muted-foreground">{formatTime(new Date(shift.ended_at))}</div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">В процессе</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={getStatusColor(shift.status)}>
-                          {getStatusLabel(shift.status)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {shift.minutes_late > 0 ? `${shift.minutes_late} мин` : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {shift.early_minutes && shift.early_minutes > 0 ? (
-                          <span className="text-blue-600 flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3" />
-                            {shift.early_minutes} мин
-                          </span>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {shift.pause_history && shift.pause_history.length > 0 ? (
-                          <div className="flex flex-col gap-1">
-                            <span className="text-amber-600 flex items-center gap-1">
-                              <Pause className="w-3 h-3" />
-                              {shift.pause_history.length} ({shift.total_paused_minutes || 0} мин)
-                            </span>
-                            {shift.is_grouped && shift.auto_pauses.length > 0 && (
-                              <span className="text-xs text-orange-600">
-                                🔄 {shift.auto_pauses.length} автопауз(ы)
+            (() => {
+              const totalPages = Math.ceil(shifts.length / PAGE_SIZE);
+              const paginated = shifts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+              return (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Сотрудник</TableHead>
+                          <TableHead>Объект</TableHead>
+                          <TableHead>Начало</TableHead>
+                          <TableHead>Конец</TableHead>
+                          <TableHead>Статус</TableHead>
+                          <TableHead>Опоздание</TableHead>
+                          <TableHead>Раньше</TableHead>
+                          <TableHead>Паузы</TableHead>
+                          <TableHead>Отработано</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginated.map((shift) => (
+                          <TableRow
+                            key={shift.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => navigate(`/admin/workers/${shift.user_id}`)}
+                          >
+                            <TableCell className="font-medium">
+                              {shift.user_name}
+                              {shift.is_grouped && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  🔄 {shift.shift_segments.length} смен(ы)
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>{shift.site_name}</TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                <div>{formatDate(new Date(shift.started_at))}</div>
+                                <div className="text-muted-foreground">{formatTime(new Date(shift.started_at))}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {shift.ended_at ? (
+                                <div className="text-sm">
+                                  <div>{formatDate(new Date(shift.ended_at))}</div>
+                                  <div className="text-muted-foreground">{formatTime(new Date(shift.ended_at))}</div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">В процессе</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <span className={getStatusColor(shift.status)}>
+                                {getStatusLabel(shift.status)}
                               </span>
-                            )}
-                          </div>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {shift.minutes_worked 
-                          ? `${Math.floor(shift.minutes_worked / 60)}ч ${shift.minutes_worked % 60}м`
-                          : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                            </TableCell>
+                            <TableCell>
+                              {shift.minutes_late > 0 ? `${shift.minutes_late} мин` : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {shift.early_minutes && shift.early_minutes > 0 ? (
+                                <span className="text-blue-600 flex items-center gap-1">
+                                  <TrendingUp className="w-3 h-3" />
+                                  {shift.early_minutes} мин
+                                </span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {shift.pause_history && shift.pause_history.length > 0 ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-amber-600 flex items-center gap-1">
+                                    <Pause className="w-3 h-3" />
+                                    {shift.pause_history.length} ({shift.total_paused_minutes || 0} мин)
+                                  </span>
+                                  {shift.is_grouped && shift.auto_pauses.length > 0 && (
+                                    <span className="text-xs text-orange-600">
+                                      🔄 {shift.auto_pauses.length} автопауз(ы)
+                                    </span>
+                                  )}
+                                </div>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {shift.minutes_worked
+                                ? `${Math.floor(shift.minutes_worked / 60)}ч ${shift.minutes_worked % 60}м`
+                                : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <p className="text-sm text-muted-foreground">
+                        Показано {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, shifts.length)} из {shifts.length}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(p => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                        >
+                          ← Назад
+                        </Button>
+                        <span className="flex items-center px-3 text-sm">
+                          {page} / {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                          disabled={page === totalPages}
+                        >
+                          Вперёд →
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()
           )}
         </Card>
       </main>
