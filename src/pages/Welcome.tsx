@@ -525,7 +525,7 @@ const Welcome = () => {
               <span className="font-semibold text-sm">GeoTime</span>
             </div>
             <div className="text-xs text-gray-400 leading-relaxed">
-              © 2026 GeoTime · Все права защищены<br />
+              © 2025 GeoTime · Все права защищены<br />
               Разработано <span className="text-gray-500 font-medium">Firdavs Fayzullayev</span>
             </div>
           </div>
