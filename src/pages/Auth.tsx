@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Clock, ArrowLeft, User, Lock, Building2 } from 'lucide-react';
+import { ArrowLeft, User, Lock, Building2 } from 'lucide-react';
+import GeoTimeLogo from '@/components/GeoTimeLogo';
 import { loginWithCredentials } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -77,10 +78,8 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent mb-2">
-            <Clock className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold">VEZIR - GeoTime</h1>
+          <GeoTimeLogo size={64} className="mx-auto mb-2" />
+          <h1 className="text-3xl font-bold">VEZIR GeoTime</h1>
           <p className="text-muted-foreground">Вход в систему</p>
         </div>
 

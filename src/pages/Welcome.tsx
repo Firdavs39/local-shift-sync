@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
-  Clock, MapPin, Shield, Users, FileBarChart, Send,
+  MapPin, Shield, Users, FileBarChart, Send,
   CheckCircle, ArrowRight, Building2, Zap, Crown,
   AlertTriangle, XCircle, TrendingDown, MessageCircle,
   ChevronDown, ChevronUp, Star,
 } from 'lucide-react';
 import { useState } from 'react';
+import GeoTimeLogo from '@/components/GeoTimeLogo';
 
 const CONTACT_TELEGRAM = 'https://t.me/llmaiweb3';
 
@@ -271,9 +272,7 @@ const Welcome = () => {
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-              <Clock className="w-4 h-4 text-white" />
-            </div>
+            <GeoTimeLogo size={28} />
             <span className="font-bold text-base">VEZIR GeoTime</span>
           </div>
           <div className="flex items-center gap-2">
@@ -521,9 +520,7 @@ const Welcome = () => {
       <footer className="border-t border-gray-100 bg-white py-8 px-4">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-              <Clock className="w-3.5 h-3.5 text-white" />
-            </div>
+            <GeoTimeLogo size={24} />
             <span className="font-semibold text-sm">VEZIR GeoTime</span>
             <span className="text-gray-300 hidden sm:block">·</span>
             <span className="text-gray-400 text-xs hidden sm:block">{t.footer.copy}</span>

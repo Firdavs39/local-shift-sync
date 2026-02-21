@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Clock, Building2, User, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Building2, User, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import GeoTimeLogo from '@/components/GeoTimeLogo';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -112,9 +113,7 @@ const Register = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent mb-2">
-            <Clock className="w-8 h-8 text-white" />
-          </div>
+          <GeoTimeLogo size={64} className="mx-auto mb-2" />
           <h1 className="text-2xl font-bold">Регистрация компании</h1>
           <p className="text-muted-foreground text-sm">
             14 дней бесплатно. Без привязки карты.
