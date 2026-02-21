@@ -90,7 +90,7 @@ const TelegramSettings = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: config.chat_id,
-            text: '✅ Fayz GeoTime: Telegram уведомления настроены и работают!',
+            text: '✅ GeoTime: Telegram уведомления настроены и работают!',
           }),
         },
       );

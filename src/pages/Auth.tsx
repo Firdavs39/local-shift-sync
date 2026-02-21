@@ -79,7 +79,7 @@ const Auth = () => {
       <Card className="w-full max-w-md p-8 space-y-6">
         <div className="text-center space-y-4">
           <GeoTimeLogo size={64} className="mx-auto mb-2" />
-          <h1 className="text-3xl font-bold">Fayz GeoTime</h1>
+          <h1 className="text-3xl font-bold">GeoTime</h1>
           <p className="text-muted-foreground">Вход в систему</p>
         </div>
 

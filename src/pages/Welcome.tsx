@@ -85,7 +85,7 @@ const TRANSLATIONS = {
     faq: {
       title: 'Частые вопросы',
       items: [
-        { q: 'Нужно ли устанавливать приложение?', a: 'Нет. Fayz GeoTime работает прямо в браузере телефона — сотрудник открывает ссылку и готово. Никаких установок из App Store или Google Play.' },
+        { q: 'Нужно ли устанавливать приложение?', a: 'Нет. GeoTime работает прямо в браузере телефона — сотрудник открывает ссылку и готово. Никаких установок из App Store или Google Play.' },
         { q: 'Что если сотрудник выключит геолокацию?', a: 'Без геолокации нельзя начать смену — система выдаст ошибку. Обмануть не получится: смена привязана к GPS-координатам объекта с радиусом, который вы сами задаёте.' },
         { q: 'Как оплачивать? Принимаете Payme?', a: 'Оплата через Payme или банковский перевод (счёт-фактура). Напишите нам в Telegram и мы выставим счёт в течение рабочего дня.' },
         { q: 'Можно попробовать бесплатно?', a: 'Да! После регистрации вы получаете пробный период без ограничений по функционалу. Карта и реквизиты не нужны.' },
@@ -178,7 +178,7 @@ const TRANSLATIONS = {
     faq: {
       title: 'Ko\'p so\'raladigan savollar',
       items: [
-        { q: 'Ilova o\'rnatish kerakmi?', a: 'Yo\'q. Fayz GeoTime to\'g\'ridan-to\'g\'ri telefon brauzerida ishlaydi — xodim havolani ochadi va tayyor. App Store yoki Google Play dan hech qanday o\'rnatish yo\'q.' },
+        { q: 'Ilova o\'rnatish kerakmi?', a: 'Yo\'q. GeoTime to\'g\'ridan-to\'g\'ri telefon brauzerida ishlaydi — xodim havolani ochadi va tayyor. App Store yoki Google Play dan hech qanday o\'rnatish yo\'q.' },
         { q: 'Xodim geolokatsiyani o\'chirsa nima bo\'ladi?', a: 'Geolokatsiyasiz smena boshlash mumkin emas — tizim xato beradi. Aldab bo\'lmaydi: smena siz belgilagan radiusga ega ob\'ekt GPS koordinatalariga bog\'langan.' },
         { q: 'Qanday to\'lash mumkin? Payme qabul qilasizmi?', a: 'Payme orqali yoki bank o\'tkazmasi (hisob-faktura) orqali to\'lov. Telegramda yozing va biz ish kuni davomida hisob-faktura chiqaramiz.' },
         { q: 'Bepul sinab ko\'rish mumkinmi?', a: 'Ha! Ro\'yxatdan o\'tgandan keyin siz funksionallik bo\'yicha cheklovlarsiz sinov muddati olasiz. Karta va rekvizitlar kerak emas.' },
@@ -273,7 +273,7 @@ const Welcome = () => {
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GeoTimeLogo size={28} />
-            <span className="font-bold text-base">Fayz GeoTime</span>
+            <span className="font-bold text-base">GeoTime</span>
           </div>
           <div className="flex items-center gap-2">
             <LangToggle lang={lang} setLang={setLang} />
@@ -522,10 +522,10 @@ const Welcome = () => {
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <GeoTimeLogo size={24} />
-              <span className="font-semibold text-sm">Fayz GeoTime</span>
+              <span className="font-semibold text-sm">GeoTime</span>
             </div>
             <div className="text-xs text-gray-400 leading-relaxed">
-              © 2026 Fayz GeoTime · Все права защищены<br />
+              © 2026 GeoTime · Все права защищены<br />
               Разработано <span className="text-gray-500 font-medium">Firdavs Fayzullayev</span>
             </div>
           </div>
