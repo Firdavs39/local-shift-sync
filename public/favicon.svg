@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="16" fill="#7c3aed"/>
+  <!-- Location pin body -->
+  <path d="M16 6C12.13 6 9 9.13 9 13c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="white"/>
+  <!-- Clock face inside pin -->
+  <circle cx="16" cy="13" r="3.2" fill="#7c3aed"/>
+  <!-- Clock hour hand (pointing up-left, ~10 o'clock) -->
+  <line x1="16" y1="13" x2="14.7" y2="11.5" stroke="white" stroke-width="1.1" stroke-linecap="round"/>
+  <!-- Clock minute hand (pointing right, ~3 o'clock) -->
+  <line x1="16" y1="13" x2="17.8" y2="13" stroke="white" stroke-width="1.1" stroke-linecap="round"/>
+  <!-- Center dot -->
+  <circle cx="16" cy="13" r="0.5" fill="white"/>
+</svg>
