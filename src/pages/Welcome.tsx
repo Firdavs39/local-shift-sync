@@ -231,6 +231,139 @@ const PAIN_META = [
 
 const STEP_ICONS = [Building2, MapPin, FileBarChart];
 
+// ─── LOSS CALCULATOR ──────────────────────────────────────────────────────────
+const Calculator = () => {
+  const [workers, setWorkers] = useState(30);
+  const [animKey, setAnimKey] = useState(0);
+
+  const handleChange = (val: number) => {
+    setWorkers(val);
+    setAnimKey(k => k + 1);
+  };
+
+  const hourlyRate = 2_500_000 / 176;
+  const fakeHours  = (30 / 60) * 22;
+  const totalLoss  = Math.round(hourlyRate * fakeHours * workers / 1000) * 1000;
+  const geoCost    = workers * 10_000;
+  const savings    = totalLoss - geoCost;
+  const roi        = Math.round(totalLoss / geoCost);
+  const pct        = Math.max(2, Math.round((geoCost / totalLoss) * 100));
+  const filled     = Math.round(((workers - 5) / 195) * 100);
+
+  const fmt = (n: number) => n.toLocaleString('ru-RU') + ' сум';
+  const pop: React.CSSProperties = { animation: 'geotime-num-pop 0.42s cubic-bezier(.4,0,.2,1) forwards' };
+
+  return (
+    <section className="relative py-24 px-4 overflow-hidden bg-gradient-to-br from-slate-900 via-violet-950 to-indigo-950">
+      <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-violet-600/20 blur-3xl pointer-events-none" style={{ animation: 'geotime-orb1 16s ease-in-out infinite' }} />
+      <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" style={{ animation: 'geotime-orb2 20s ease-in-out infinite' }} />
+      <div className="absolute inset-0 opacity-[0.035] pointer-events-none" style={{
+        backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)',
+        backgroundSize: '48px 48px',
+      }} />
+
+      <div className="relative z-10 max-w-3xl mx-auto">
+        <div className="text-center mb-12 space-y-4">
+          <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 text-violet-300 px-4 py-1.5 rounded-full text-xs font-medium">
+            🧮 Калькулятор потерь
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
+            Считаем сколько вы теряете<br />
+            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">прямо сейчас</span>
+          </h2>
+          <p className="text-slate-400 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
+            В среднем каждый сотрудник приписывает 30 мин в день. Потяните слайдер — увидите свои потери.
+          </p>
+        </div>
+
+        <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/[0.1] rounded-3xl p-8 shadow-2xl space-y-8">
+
+          {/* Slider */}
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-300 text-sm font-medium">Количество сотрудников</span>
+              <div className="bg-violet-500/25 border border-violet-400/35 rounded-xl px-4 py-1.5">
+                <span className="text-white font-extrabold text-xl tabular-nums">{workers}</span>
+                <span className="text-violet-300 text-sm ml-1.5">чел</span>
+              </div>
+            </div>
+            <input
+              type="range" min={5} max={200} step={1} value={workers}
+              onChange={e => handleChange(Number(e.target.value))}
+              className="geotime-slider"
+              style={{ background: `linear-gradient(to right,#8b5cf6 0%,#6366f1 ${filled}%,rgba(255,255,255,0.12) ${filled}%,rgba(255,255,255,0.12) 100%)` }}
+            />
+            <div className="flex justify-between text-xs text-slate-600 px-0.5">
+              {[5, 50, 100, 150, 200].map(v => <span key={v}>{v}</span>)}
+            </div>
+          </div>
+
+          {/* Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-red-500/12 border border-red-500/20 rounded-2xl p-5 text-center space-y-2">
+              <div className="text-3xl">💸</div>
+              <div className="text-red-300/80 text-[11px] font-semibold uppercase tracking-widest">Теряете в месяц</div>
+              <div key={`l${animKey}`} className="text-red-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(totalLoss)}</div>
+              <div className="text-red-400/60 text-[11px]">30 мин приписок × {workers} чел</div>
+            </div>
+
+            <div className="bg-emerald-500/12 border border-emerald-500/20 rounded-2xl p-5 text-center space-y-2">
+              <div className="text-3xl">✅</div>
+              <div className="text-emerald-300/80 text-[11px] font-semibold uppercase tracking-widest">GeoTime стоит</div>
+              <div key={`c${animKey}`} className="text-emerald-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(geoCost)}</div>
+              <div className="text-emerald-400/60 text-[11px]">10 000 сум × {workers} чел</div>
+            </div>
+
+            <div className="bg-violet-500/15 border border-violet-400/25 rounded-2xl p-5 text-center space-y-2 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent pointer-events-none rounded-2xl" />
+              <div className="text-3xl">💰</div>
+              <div className="text-violet-300/80 text-[11px] font-semibold uppercase tracking-widest">Экономия</div>
+              <div key={`s${animKey}`} className="text-violet-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(savings)}</div>
+              <div className="text-violet-400/60 text-[11px]">чистая прибыль в месяц</div>
+            </div>
+          </div>
+
+          {/* ROI Bar */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+              <span>GeoTime — всего <span className="text-white font-bold">{pct}%</span> от ваших потерь</span>
+              <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 text-amber-300 px-3 py-1 rounded-full text-[11px] font-semibold">
+                ⚡ ROI {roi}× — окупается в {roi} раз
+              </div>
+            </div>
+            <div className="h-5 bg-white/[0.07] rounded-full overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-600/50 to-orange-500/40 rounded-full" />
+              <div
+                className="absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out bg-gradient-to-r from-violet-500 to-indigo-500 flex items-center justify-end pr-2"
+                style={{ width: `${pct}%`, minWidth: 40 }}
+              >
+                <span className="text-white text-[10px] font-bold whitespace-nowrap">{pct}%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-5 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500/70 shrink-0" />Потери без контроля</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0" />Стоимость GeoTime</span>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <Button
+            className="w-full h-14 text-base font-bold bg-gradient-to-r from-violet-500 to-indigo-500 hover:opacity-90 shadow-xl shadow-violet-900/60 border-0 rounded-2xl"
+            onClick={() => window.location.href = '/register'}
+          >
+            Начать экономить {fmt(savings)} / мес
+            <ArrowRight className="w-5 h-5 ml-2" />
+          </Button>
+        </div>
+
+        <p className="text-center text-slate-600 text-[11px] mt-5">
+          * Средняя зарплата 2 500 000 сум/мес · 176 рабочих часов · 30 мин приписок/день на сотрудника
+        </p>
+      </div>
+    </section>
+  );
+};
+
 // ─── MARQUEE ──────────────────────────────────────────────────────────────────
 const MARQUEE_ITEMS = [
   { icon: '✅', text: 'Алишер К. начал смену · Объект №1',           time: '08:02' },
@@ -617,6 +750,9 @@ const Welcome = () => {
           </div>
         </div>
       </section>
+
+      {/* CALCULATOR */}
+      <Calculator />
 
       {/* FEATURES */}
       <section className="py-16 px-4 bg-gray-50">
