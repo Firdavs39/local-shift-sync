@@ -6,7 +6,7 @@ import {
   AlertTriangle, XCircle, TrendingDown, MessageCircle,
   ChevronDown, ChevronUp, Star,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import GeoTimeLogo from '@/components/GeoTimeLogo';
 
 const CONTACT_TELEGRAM = 'https://t.me/llmaiweb3';
@@ -231,6 +231,183 @@ const PAIN_META = [
 
 const STEP_ICONS = [Building2, MapPin, FileBarChart];
 
+// ─── HOOKS ────────────────────────────────────────────────────────────────────
+const useScrollReveal = (threshold = 0.12) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return { ref, visible };
+};
+
+const useCountUp = (target: number, duration = 1600, start = false) => {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!start) return;
+    let t0: number | null = null;
+    const step = (ts: number) => {
+      if (!t0) t0 = ts;
+      const p = Math.min((ts - t0) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setCount(Math.round(ease * target));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [start, target, duration]);
+  return count;
+};
+
+// ─── REVEAL DIV ───────────────────────────────────────────────────────────────
+interface RevealProps {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+  direction?: 'up' | 'left' | 'right';
+}
+const RevealDiv: React.FC<RevealProps> = ({ children, className = '', delay = 0, direction = 'up' }) => {
+  const { ref, visible } = useScrollReveal();
+  const initial = direction === 'left' ? 'translateX(-36px)' : direction === 'right' ? 'translateX(36px)' : 'translateY(36px)';
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'none' : initial,
+        transition: `opacity 0.65s cubic-bezier(.4,0,.2,1) ${delay}ms, transform 0.65s cubic-bezier(.4,0,.2,1) ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+
+// ─── STAT ITEM ────────────────────────────────────────────────────────────────
+const StatItem = ({ value, label, start }: { value: string; label: string; start: boolean }) => {
+  const match = value.match(/^(\d+)(.*)$/);
+  const num = match ? parseInt(match[1]) : 0;
+  const suffix = match ? match[2] : value;
+  const count = useCountUp(num, 1600, start);
+  return (
+    <div className="text-center p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-100">
+      <div className="text-2xl sm:text-4xl font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
+        {match ? `${count}${suffix}` : value}
+      </div>
+      <div className="text-xs sm:text-sm text-gray-500 mt-1">{label}</div>
+    </div>
+  );
+};
+
+// ─── STATS ROW ────────────────────────────────────────────────────────────────
+const StatsRow = ({ stats }: { stats: readonly { value: string; label: string }[] }) => {
+  const { ref, visible } = useScrollReveal(0.3);
+  return (
+    <div ref={ref} className="grid grid-cols-3 gap-3 sm:gap-6">
+      {stats.map(({ value, label }) => (
+        <StatItem key={label} value={value} label={label} start={visible} />
+      ))}
+    </div>
+  );
+};
+
+// ─── APP MOCKUP ───────────────────────────────────────────────────────────────
+const MOCK_WORKERS = [
+  { name: 'Алишер К.', site: 'Объект №1', time: '08:02', ok: true },
+  { name: 'Бахром Ю.', site: 'Объект №2', time: '08:31', ok: false, late: '23 мин' },
+  { name: 'Санжар М.', site: 'Объект №1', time: '07:58', ok: true },
+];
+const AppMockup = () => {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 3800);
+    return () => clearInterval(id);
+  }, []);
+  const notifVisible = tick % 2 === 0;
+  return (
+    <div className="relative mx-auto select-none" style={{ maxWidth: 320 }}>
+      {/* Notification */}
+      <div
+        key={tick}
+        className="absolute -top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none"
+        style={{ animation: notifVisible ? 'geotime-notif 3.8s ease forwards' : 'none', opacity: 0 }}
+      >
+        <div className="bg-white border border-orange-200 rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center gap-2.5 whitespace-nowrap">
+          <span className="text-base">📲</span>
+          <div>
+            <div className="text-[11px] font-semibold text-gray-700">Telegram уведомление</div>
+            <div className="text-[11px] text-orange-600 font-medium">Бахром Ю. опоздал на 23 мин</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Card */}
+      <div
+        className="bg-white rounded-3xl overflow-hidden border border-gray-100"
+        style={{
+          animation: 'geotime-float 5s ease-in-out infinite',
+          boxShadow: '0 30px 70px -20px rgba(124,58,237,0.25), 0 4px 20px -5px rgba(0,0,0,0.08)',
+        }}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GeoTimeLogo size={18} />
+            <span className="text-white text-sm font-semibold">GeoTime</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
+            <span className="text-violet-200 text-xs font-mono">08:35</span>
+          </div>
+        </div>
+
+        {/* Workers */}
+        <div className="divide-y divide-gray-50">
+          {MOCK_WORKERS.map((w, i) => (
+            <div key={i} className="px-4 py-3 flex items-center gap-3">
+              <div className="relative shrink-0">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${w.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                  {w.name.split(' ').map(p => p[0]).join('')}
+                </div>
+                <div
+                  className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${w.ok ? 'bg-green-400' : 'bg-red-400'}`}
+                  style={!w.ok ? { animation: 'geotime-pulse 1.2s ease-in-out infinite' } : {}}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-800">{w.name}</span>
+                  <span className="text-[11px] text-gray-400 font-mono">{w.time}</span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[11px] text-gray-400">{w.site}</span>
+                  {w.ok
+                    ? <span className="text-[11px] text-green-600 font-medium">✓ Вовремя</span>
+                    : <span className="text-[11px] text-red-500 font-medium">⚠ +{w.late}</span>
+                  }
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="bg-violet-50 px-4 py-2.5 flex items-center justify-between border-t border-violet-100">
+          <span className="text-[11px] text-violet-500">● 3 онлайн</span>
+          <span className="text-[11px] text-violet-700 font-semibold">Открыть отчёт →</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── FAQ ITEM ─────────────────────────────────────────────────────────────────
 const FaqItem = ({ q, a }: { q: string; a: string }) => {
   const [open, setOpen] = useState(false);
@@ -291,34 +468,52 @@ const Welcome = () => {
       </nav>
 
       {/* HERO */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-violet-50 to-white pt-16 pb-20 px-4">
+      <section className="relative overflow-hidden bg-gradient-to-b from-violet-50 to-white pt-14 pb-20 px-4">
+        {/* Animated orbs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-violet-100 opacity-60 blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-indigo-100 opacity-50 blur-3xl" />
+          <div className="absolute -top-40 -right-20 w-96 h-96 rounded-full bg-violet-200 opacity-40 blur-3xl" style={{ animation: 'geotime-orb1 12s ease-in-out infinite' }} />
+          <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-indigo-200 opacity-35 blur-3xl" style={{ animation: 'geotime-orb2 15s ease-in-out infinite' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-purple-100 opacity-30 blur-3xl" style={{ animation: 'geotime-orb1 18s ease-in-out infinite reverse' }} />
         </div>
-        <div className="relative max-w-3xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center gap-2 bg-white border border-violet-200 text-violet-700 px-3 py-1.5 rounded-full text-xs font-medium shadow-sm">
-            <Zap className="w-3 h-3" />
-            {t.badge}
-          </div>
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
-            {t.hero.line1}
-            <span className="block bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">{t.hero.line2}</span>
-            {t.hero.line3}
-          </h1>
-          <p className="text-base sm:text-lg text-gray-500 max-w-xl mx-auto leading-relaxed">{t.hero.sub}</p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <Button size="lg" className="h-12 px-7 text-base font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200" onClick={() => navigate('/register')}>
-              {t.hero.cta1} <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-            <Button size="lg" variant="outline" className="h-12 px-7 text-base border-gray-200 text-gray-800 hover:bg-gray-50 hover:text-gray-900" onClick={() => navigate('/auth')}>
-              {t.hero.cta2}
-            </Button>
-          </div>
-          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-400 pt-1">
-            {[t.hero.check1, t.hero.check2, t.hero.check3].map((c) => (
-              <span key={c} className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500" />{c}</span>
-            ))}
+
+        <div className="relative max-w-6xl mx-auto">
+          <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+
+            {/* Left: Text */}
+            <div className="flex-1 text-center lg:text-left space-y-6">
+              <div
+                className="inline-flex items-center gap-2 bg-white border border-violet-200 text-violet-700 px-3 py-1.5 rounded-full text-xs font-medium shadow-sm"
+                style={{ animation: 'geotime-badge-pulse 2.5s ease-in-out infinite' }}
+              >
+                <Zap className="w-3 h-3" />
+                {t.badge}
+              </div>
+              <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
+                {t.hero.line1}
+                <span className="block bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">{t.hero.line2}</span>
+                {t.hero.line3}
+              </h1>
+              <p className="text-base sm:text-lg text-gray-500 max-w-xl leading-relaxed mx-auto lg:mx-0">{t.hero.sub}</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start pt-2">
+                <Button size="lg" className="h-12 px-7 text-base font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200" onClick={() => navigate('/register')}>
+                  {t.hero.cta1} <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+                <Button size="lg" variant="outline" className="h-12 px-7 text-base border-gray-200 text-gray-800 hover:bg-gray-50 hover:text-gray-900" onClick={() => navigate('/auth')}>
+                  {t.hero.cta2}
+                </Button>
+              </div>
+              <div className="flex flex-wrap justify-center lg:justify-start gap-x-6 gap-y-2 text-xs text-gray-400 pt-1">
+                {[t.hero.check1, t.hero.check2, t.hero.check3].map((c) => (
+                  <span key={c} className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-green-500" />{c}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: App Mockup */}
+            <div className="flex-1 w-full max-w-sm lg:max-w-none pt-8 lg:pt-0">
+              <AppMockup />
+            </div>
+
           </div>
         </div>
       </section>
@@ -326,23 +521,26 @@ const Welcome = () => {
       {/* PAIN */}
       <section className="py-16 px-4 bg-gray-50">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10">
+          <RevealDiv className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">{t.pain.title}</h2>
             <p className="text-gray-500 text-sm sm:text-base">{t.pain.sub}</p>
-          </div>
+          </RevealDiv>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {t.pain.items.map((item, i) => {
               const { icon: Icon, color, bg } = PAIN_META[i];
+              const dir = i % 2 === 0 ? 'left' : 'right';
               return (
-                <div key={i} className="flex gap-4 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                  <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-                    <Icon className={`w-5 h-5 ${color}`} />
+                <RevealDiv key={i} direction={dir} delay={i * 80}>
+                  <div className="flex gap-4 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm h-full">
+                    <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm mb-1">{item.title}</h3>
+                      <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-sm mb-1">{item.title}</h3>
-                    <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
-                  </div>
-                </div>
+                </RevealDiv>
               );
             })}
           </div>
@@ -352,27 +550,29 @@ const Welcome = () => {
       {/* HOW IT WORKS */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
+          <RevealDiv className="text-center mb-12">
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">{t.how.title}</h2>
             <p className="text-gray-500 text-sm sm:text-base">{t.how.sub}</p>
-          </div>
+          </RevealDiv>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
             {t.how.steps.map((step, i) => {
               const Icon = STEP_ICONS[i];
               return (
-                <div key={i} className="relative flex flex-row md:flex-col gap-4 md:gap-0 md:text-center">
-                  {i < 2 && <div className="hidden md:block absolute top-6 left-1/2 w-full h-px bg-gradient-to-r from-violet-200 to-transparent" />}
-                  <div className="shrink-0 md:mx-auto w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-violet-200 relative z-10">
-                    {String(i + 1).padStart(2, '0')}
-                  </div>
-                  <div className="md:mt-4">
-                    <div className="flex items-center gap-2 mb-1 md:justify-center">
-                      <Icon className="w-4 h-4 text-violet-500" />
-                      <h3 className="font-semibold text-sm">{step.title}</h3>
+                <RevealDiv key={i} delay={i * 120}>
+                  <div className="relative flex flex-row md:flex-col gap-4 md:gap-0 md:text-center">
+                    {i < 2 && <div className="hidden md:block absolute top-6 left-1/2 w-full h-px bg-gradient-to-r from-violet-200 to-transparent" />}
+                    <div className="shrink-0 md:mx-auto w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-violet-200 relative z-10">
+                      {String(i + 1).padStart(2, '0')}
                     </div>
-                    <p className="text-xs text-gray-500 leading-relaxed">{step.desc}</p>
+                    <div className="md:mt-4">
+                      <div className="flex items-center gap-2 mb-1 md:justify-center">
+                        <Icon className="w-4 h-4 text-violet-500" />
+                        <h3 className="font-semibold text-sm">{step.title}</h3>
+                      </div>
+                      <p className="text-xs text-gray-500 leading-relaxed">{step.desc}</p>
+                    </div>
                   </div>
-                </div>
+                </RevealDiv>
               );
             })}
           </div>
@@ -382,21 +582,37 @@ const Welcome = () => {
       {/* FEATURES */}
       <section className="py-16 px-4 bg-gray-50">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10">
+          <RevealDiv className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">{t.features.title}</h2>
             <p className="text-gray-500 text-sm sm:text-base">{t.features.sub}</p>
-          </div>
+          </RevealDiv>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {t.features.items.map((item, i) => {
               const { icon: Icon, color, bg } = FEATURE_META[i];
               return (
-                <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                  <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-3`}>
-                    <Icon className={`w-5 h-5 ${color}`} />
+                <RevealDiv key={i} delay={i * 70}>
+                  <div
+                    className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm cursor-default"
+                    style={{ transition: 'transform 0.15s ease, box-shadow 0.15s ease', willChange: 'transform' }}
+                    onMouseMove={e => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const x = ((e.clientX - r.left) / r.width - 0.5) * 16;
+                      const y = ((e.clientY - r.top) / r.height - 0.5) * -16;
+                      e.currentTarget.style.transform = `perspective(700px) rotateX(${y}deg) rotateY(${x}deg) translateZ(6px)`;
+                      e.currentTarget.style.boxShadow = '0 16px 40px -10px rgba(124,58,237,0.18)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'perspective(700px) rotateX(0deg) rotateY(0deg) translateZ(0)';
+                      e.currentTarget.style.boxShadow = '';
+                    }}
+                  >
+                    <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-3`}>
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                    <h3 className="font-semibold text-sm mb-1">{item.title}</h3>
+                    <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
                   </div>
-                  <h3 className="font-semibold text-sm mb-1">{item.title}</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed">{item.desc}</p>
-                </div>
+                </RevealDiv>
               );
             })}
           </div>
@@ -406,14 +622,7 @@ const Welcome = () => {
       {/* STATS + TESTIMONIAL */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto space-y-8">
-          <div className="grid grid-cols-3 gap-3 sm:gap-6">
-            {t.stats.map(({ value, label }) => (
-              <div key={label} className="text-center p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-100">
-                <div className="text-2xl sm:text-4xl font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">{value}</div>
-                <div className="text-xs sm:text-sm text-gray-500 mt-1">{label}</div>
-              </div>
-            ))}
-          </div>
+          <StatsRow stats={t.stats} />
           <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-3xl border border-violet-100 p-6 sm:p-8">
             <div className="flex gap-0.5 mb-3">
               {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
