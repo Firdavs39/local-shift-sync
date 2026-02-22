@@ -314,12 +314,14 @@ const Calculator = () => {
               <div className="text-emerald-400/60 text-[11px]">10 000 сум × {workers} чел</div>
             </div>
 
-            <div className="bg-violet-500/15 border border-violet-400/25 rounded-2xl p-5 text-center space-y-2 relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent pointer-events-none rounded-2xl" />
-              <div className="text-3xl">💰</div>
-              <div className="text-violet-300/80 text-[11px] font-semibold uppercase tracking-widest">Экономия</div>
-              <div key={`s${animKey}`} className="text-violet-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(savings)}</div>
-              <div className="text-violet-400/60 text-[11px]">чистая прибыль в месяц</div>
+            <div className="bg-violet-500/15 border border-violet-400/25 rounded-2xl relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent pointer-events-none" />
+              <div className="relative z-10 p-5 text-center space-y-2">
+                <div className="text-3xl">💰</div>
+                <div className="text-violet-300/80 text-[11px] font-semibold uppercase tracking-widest">Экономия</div>
+                <div key={`s${animKey}`} className="text-violet-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(savings)}</div>
+                <div className="text-violet-400/60 text-[11px]">чистая прибыль в месяц</div>
+              </div>
             </div>
           </div>
 
