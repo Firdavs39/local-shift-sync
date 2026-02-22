@@ -231,6 +231,42 @@ const PAIN_META = [
 
 const STEP_ICONS = [Building2, MapPin, FileBarChart];
 
+// ─── MARQUEE ──────────────────────────────────────────────────────────────────
+const MARQUEE_ITEMS = [
+  { icon: '✅', text: 'Алишер К. начал смену · Объект №1',           time: '08:02' },
+  { icon: '⚠️', text: 'Бахром Ю. опоздал на 23 мин · Объект №2',    time: '08:31' },
+  { icon: '✅', text: 'Санжар М. прибыл · GPS подтверждён',           time: '07:58' },
+  { icon: '📊', text: 'Отчёт за неделю сформирован · CSV готов',      time: '18:00' },
+  { icon: '📲', text: 'Telegram-уведомление отправлено директору',    time: '08:31' },
+  { icon: '✅', text: 'Дилшод А. завершил смену · 8ч 02мин',          time: '17:04' },
+  { icon: '✅', text: 'Улугбек Р. открыл смену вовремя',              time: '09:00' },
+  { icon: '⏰', text: 'Автозакрытие смен · 5 сотрудников',             time: '18:00' },
+  { icon: '⚠️', text: 'Нодир Т. вышел из зоны объекта',              time: '14:22' },
+  { icon: '✅', text: 'Жамшид Х. на объекте · 3-й день без опозданий', time: '08:00' },
+];
+
+const NotifMarquee = () => {
+  const doubled = [...MARQUEE_ITEMS, ...MARQUEE_ITEMS];
+  return (
+    <div className="overflow-hidden bg-white border-y border-gray-100 py-3 relative">
+      <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+      <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+      <div
+        className="flex gap-4 w-max"
+        style={{ animation: 'geotime-marquee 40s linear infinite' }}
+      >
+        {doubled.map((item, i) => (
+          <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-full px-4 py-1.5 shrink-0 hover:border-violet-200 hover:bg-violet-50 transition-colors">
+            <span className="text-sm leading-none">{item.icon}</span>
+            <span className="text-xs font-medium text-gray-700 whitespace-nowrap">{item.text}</span>
+            <span className="text-[11px] text-gray-400 font-mono whitespace-nowrap ml-1">{item.time}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ─── HOOKS ────────────────────────────────────────────────────────────────────
 const useScrollReveal = (threshold = 0.12) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -517,6 +553,9 @@ const Welcome = () => {
           </div>
         </div>
       </section>
+
+      {/* MARQUEE */}
+      <NotifMarquee />
 
       {/* PAIN */}
       <section className="py-16 px-4 bg-gray-50">

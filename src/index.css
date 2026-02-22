@@ -128,3 +128,8 @@ All colors MUST be HSL.
   0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.3); }
   50%      { box-shadow: 0 0 0 8px rgba(124, 58, 237, 0); }
 }
+
+@keyframes geotime-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
