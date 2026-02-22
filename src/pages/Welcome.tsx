@@ -299,7 +299,7 @@ const Calculator = () => {
           </div>
 
           {/* Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-4 items-stretch">
             <div className="bg-red-500/12 border border-red-500/20 rounded-2xl p-5 text-center space-y-2">
               <div className="text-3xl">💸</div>
               <div className="text-red-300/80 text-[11px] font-semibold uppercase tracking-widest">Теряете в месяц</div>
