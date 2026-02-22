@@ -577,6 +577,204 @@ const AppMockup = () => {
   );
 };
 
+// ─── GPS MAP MOCKUP ───────────────────────────────────────────────────────────
+const GpsMapMockup = () => (
+  <div
+    className="relative rounded-3xl overflow-hidden"
+    style={{ background: '#0b1120', minHeight: 300, boxShadow: '0 28px 64px -16px rgba(99,102,241,0.45), 0 8px 32px -8px rgba(0,0,0,0.55)' }}
+  >
+    {/* Dot grid */}
+    <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.28) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+    {/* Road network */}
+    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+      <path d="M0,105 C70,92 140,118 210,105 S320,88 400,105" stroke="rgba(99,102,241,0.25)" strokeWidth="11" fill="none" strokeLinecap="round" />
+      <path d="M0,205 C90,192 180,218 270,205 S350,192 400,205" stroke="rgba(99,102,241,0.2)" strokeWidth="11" fill="none" strokeLinecap="round" />
+      <path d="M88,0 C82,60 92,160 86,300" stroke="rgba(99,102,241,0.2)" strokeWidth="8" fill="none" strokeLinecap="round" />
+      <path d="M248,0 C254,70 244,180 250,300" stroke="rgba(99,102,241,0.2)" strokeWidth="8" fill="none" strokeLinecap="round" />
+      <path d="M0,105 C70,92 140,118 210,105 S320,88 400,105" stroke="rgba(255,255,255,0.04)" strokeWidth="2" fill="none" strokeDasharray="14 10" />
+      <path d="M0,205 C90,192 180,218 270,205 S350,192 400,205" stroke="rgba(255,255,255,0.03)" strokeWidth="2" fill="none" strokeDasharray="14 10" />
+      <rect x="96" y="12" width="144" height="85" rx="6" fill="rgba(20,20,60,0.7)" />
+      <rect x="96" y="118" width="144" height="79" rx="6" fill="rgba(20,20,60,0.65)" />
+      <rect x="258" y="12" width="136" height="85" rx="6" fill="rgba(20,20,60,0.6)" />
+      <rect x="258" y="118" width="136" height="79" rx="6" fill="rgba(20,20,60,0.55)" />
+      <rect x="4" y="118" width="76" height="79" rx="6" fill="rgba(20,20,60,0.55)" />
+      <rect x="96" y="214" width="144" height="82" rx="6" fill="rgba(20,20,60,0.65)" />
+      <rect x="258" y="214" width="136" height="82" rx="6" fill="rgba(20,20,60,0.55)" />
+    </svg>
+    {/* Geofence zone */}
+    <div className="absolute pointer-events-none" style={{ width: 148, height: 148, left: '50%', top: '50%', transform: 'translate(-65%,-52%)', borderRadius: '50%', border: '2px dashed rgba(167,139,250,0.55)', background: 'rgba(139,92,246,0.07)' }} />
+    {/* Zone label */}
+    <div className="absolute" style={{ left: '21%', top: '13%' }}>
+      <div className="inline-flex items-center gap-1.5 bg-violet-900/75 border border-violet-500/45 text-violet-300 text-[10px] rounded-full px-2.5 py-1 backdrop-blur-sm font-medium">
+        <div className="w-1.5 h-1.5 rounded-full bg-violet-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
+        Объект №1 · Чиланзар
+      </div>
+    </div>
+    {/* Worker AK — inside zone, on time */}
+    <div className="absolute" style={{ left: '38%', top: '44%', transform: 'translate(-50%,-50%)' }}>
+      <div className="absolute w-14 h-14 rounded-full bg-green-500/20" style={{ animation: 'geotime-pulse 2.6s ease-in-out infinite', top: -11, left: -11 }} />
+      <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 border-2 border-green-300 flex items-center justify-center text-white text-[10px] font-bold shadow-lg z-10">АК</div>
+      <div className="absolute z-20 whitespace-nowrap" style={{ bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6 }}>
+        <div className="bg-slate-900/95 border border-green-500/50 text-green-400 text-[9px] rounded-lg px-2 py-1 flex items-center gap-1 shadow-xl">✓ 08:02 вовремя</div>
+      </div>
+    </div>
+    {/* Worker SM — inside zone, on time */}
+    <div className="absolute" style={{ left: '57%', top: '57%', transform: 'translate(-50%,-50%)' }}>
+      <div className="absolute w-12 h-12 rounded-full bg-green-500/15" style={{ animation: 'geotime-pulse 2.6s ease-in-out infinite 1.1s', top: -8, left: -8 }} />
+      <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 border-2 border-green-300 flex items-center justify-center text-white text-[10px] font-bold shadow-lg z-10">СМ</div>
+    </div>
+    {/* Worker BY — outside zone, late */}
+    <div className="absolute" style={{ left: '79%', top: '27%', transform: 'translate(-50%,-50%)' }}>
+      <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-red-600 border-2 border-red-300 flex items-center justify-center text-white text-[10px] font-bold shadow-lg" style={{ animation: 'geotime-pulse 1.3s ease-in-out infinite' }}>БЮ</div>
+      <div className="absolute z-20 whitespace-nowrap" style={{ bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6 }}>
+        <div className="bg-red-600/95 text-white text-[9px] rounded-lg px-2 py-1 shadow-xl">⚠ Опоздание +23 мин</div>
+      </div>
+    </div>
+    {/* Top bar */}
+    <div className="absolute top-0 inset-x-0 bg-gradient-to-b from-[#0b1120] via-[#0b1120]/80 to-transparent py-3 px-4 flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        <div className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
+        <span className="text-slate-300 text-xs font-medium">Live · 3 сотрудника</span>
+      </div>
+      <span className="text-slate-500 text-xs font-mono">08:35</span>
+    </div>
+    {/* Bottom bar */}
+    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b1120] via-[#0b1120]/80 to-transparent py-3 px-4">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 bg-green-500/20 text-green-300 border border-green-500/30 text-[10px] rounded-full px-2.5 py-0.5">
+          <div className="w-1 h-1 rounded-full bg-green-400" />2 в зоне
+        </span>
+        <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] rounded-full px-2.5 py-0.5">⚠ 1 опоздал</span>
+        <span className="ml-auto text-slate-600 text-[10px]">Ташкент, Чиланзар</span>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── TELEGRAM CHAT MOCKUP ────────────────────────────────────────────────────
+const TELE_MSGS = [
+  { text: '✅ Алишер К. начал смену\n📍 Объект №1 · Чиланзар\n🕐 08:02 — вовремя', time: '08:02' },
+  { text: '⚠️ Бахром Ю. опоздал на 23 мин\n📍 Объект №2 · Юнусабад\n🕐 Должен быть в 08:00', time: '08:31' },
+];
+
+const TelegramChatMockup = () => {
+  const [phase, setPhase] = useState<0 | 1 | 2>(0);
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase(1), 2000);
+    const t2 = setTimeout(() => setPhase(2), 3400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+  return (
+    <div className="rounded-3xl overflow-hidden border border-gray-200/70 bg-[#f0f2f5]" style={{ maxWidth: 300, boxShadow: '0 25px 60px -15px rgba(42,171,238,0.25), 0 8px 30px -8px rgba(0,0,0,0.12)' }}>
+      <div className="bg-[#2AABEE] px-4 py-3 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-white/25 flex items-center justify-center shrink-0">
+          <Send className="w-3.5 h-3.5 text-white" />
+        </div>
+        <div className="flex-1">
+          <div className="text-white text-sm font-semibold">GeoTime Bot</div>
+          <div className="text-white/70 text-[11px]">всегда онлайн</div>
+        </div>
+        <div className="w-2 h-2 rounded-full bg-green-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
+      </div>
+      <div className="p-3 space-y-2.5" style={{ minHeight: 210 }}>
+        {TELE_MSGS.map((msg, i) => (
+          <div key={i} className="flex gap-2 items-end">
+            <div className="w-6 h-6 rounded-full bg-[#2AABEE]/25 flex items-center justify-center shrink-0">
+              <div className="w-3 h-3 rounded-full bg-[#2AABEE]" />
+            </div>
+            <div className="bg-white rounded-2xl rounded-bl-none p-2.5 shadow-sm max-w-[85%]">
+              <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans text-gray-700">{msg.text}</pre>
+              <div className="text-[9px] text-gray-400 text-right mt-0.5">{msg.time} ✓✓</div>
+            </div>
+          </div>
+        ))}
+        {phase === 1 && (
+          <div className="flex gap-2 items-end">
+            <div className="w-6 h-6 rounded-full bg-[#2AABEE]/25 flex items-center justify-center shrink-0">
+              <div className="w-3 h-3 rounded-full bg-[#2AABEE]" />
+            </div>
+            <div className="bg-white rounded-2xl rounded-bl-none px-3 py-2.5 shadow-sm inline-flex items-center gap-1">
+              {[0,1,2].map(d => (
+                <div key={d} className="w-1.5 h-1.5 rounded-full bg-gray-400" style={{ animation: 'geotime-pulse 0.9s ease-in-out infinite', animationDelay: `${d * 0.25}s` }} />
+              ))}
+            </div>
+          </div>
+        )}
+        {phase === 2 && (
+          <div className="flex gap-2 items-end" style={{ animation: 'geotime-num-pop 0.4s cubic-bezier(.4,0,.2,1) forwards' }}>
+            <div className="w-6 h-6 rounded-full bg-[#2AABEE]/25 flex items-center justify-center shrink-0">
+              <div className="w-3 h-3 rounded-full bg-[#2AABEE]" />
+            </div>
+            <div className="bg-white rounded-2xl rounded-bl-none p-2.5 shadow-sm max-w-[85%]">
+              <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans text-gray-700">{'📊 Дневной отчёт готов\n22 смены · 1 опоздание\nСкачать CSV ⬇️'}</pre>
+              <div className="text-[9px] text-gray-400 text-right mt-0.5">18:00 ✓</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── REPORTS TABLE MOCKUP ─────────────────────────────────────────────────────
+const REPORT_ROWS = [
+  { init: 'АК', first: 'Алишер', days: 22, hours: '176ч', lates: 0 },
+  { init: 'БЮ', first: 'Бахром',  days: 20, hours: '162ч', lates: 3 },
+  { init: 'СМ', first: 'Санжар',  days: 22, hours: '178ч', lates: 0 },
+  { init: 'ДА', first: 'Дилшод',  days: 21, hours: '169ч', lates: 1 },
+];
+
+const ReportsMockup = () => {
+  const [csvState, setCsvState] = useState<'idle' | 'loading' | 'done'>('idle');
+  const handleCsv = () => {
+    if (csvState !== 'idle') return;
+    setCsvState('loading');
+    setTimeout(() => setCsvState('done'), 1100);
+    setTimeout(() => setCsvState('idle'), 3000);
+  };
+  return (
+    <div className="rounded-3xl overflow-hidden border border-gray-100 bg-white" style={{ boxShadow: '0 25px 60px -15px rgba(124,58,237,0.18), 0 8px 30px -8px rgba(0,0,0,0.08)' }}>
+      <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 flex items-center justify-between">
+        <div>
+          <div className="text-white text-sm font-semibold">Отчёт · Февраль 2025</div>
+          <div className="text-violet-200 text-[11px] mt-0.5">4 сотрудника · Объект №1</div>
+        </div>
+        <button
+          className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl transition-all duration-300 ${csvState === 'done' ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : csvState === 'loading' ? 'bg-white/20 text-violet-200 cursor-wait' : 'bg-white text-violet-700 hover:bg-violet-50 shadow-md'}`}
+          onClick={handleCsv}
+        >
+          {csvState === 'done' ? '✓ Готово!' : csvState === 'loading' ? '...' : '↓ CSV'}
+        </button>
+      </div>
+      <div className="grid bg-gray-50 border-b border-gray-100 px-5 py-2 text-[10px] text-gray-400 font-semibold uppercase tracking-widest" style={{ gridTemplateColumns: '1fr 44px 54px 78px' }}>
+        <span>Сотрудник</span><span className="text-center">Дней</span><span className="text-center">Часы</span><span className="text-center">Статус</span>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {REPORT_ROWS.map((row, i) => (
+          <div key={i} className="grid items-center px-5 py-3 gap-2" style={{ gridTemplateColumns: '1fr 44px 54px 78px' }}>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-[9px] font-bold shrink-0">{row.init}</div>
+              <span className="text-xs font-medium text-gray-800">{row.first}</span>
+            </div>
+            <span className="text-center text-xs text-gray-500 tabular-nums">{row.days}</span>
+            <span className="text-center text-xs font-semibold text-gray-800 tabular-nums">{row.hours}</span>
+            <div className="flex justify-center">
+              {row.lates === 0
+                ? <span className="bg-green-100 text-green-700 text-[9px] rounded-full px-2 py-0.5 font-semibold">✓ Отлично</span>
+                : <span className="bg-amber-100 text-amber-700 text-[9px] rounded-full px-2 py-0.5 font-semibold">{row.lates}× поздно</span>
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+        <span className="text-[10px] text-gray-400">Итого: 685 ч · Среднее: 171 ч</span>
+        <span className="text-[10px] text-violet-500 font-medium">Скачать PDF →</span>
+      </div>
+    </div>
+  );
+};
+
 // ─── FAQ ITEM ─────────────────────────────────────────────────────────────────
 const FaqItem = ({ q, a }: { q: string; a: string }) => {
   const [open, setOpen] = useState(false);
@@ -753,6 +951,120 @@ const Welcome = () => {
 
       {/* CALCULATOR */}
       <Calculator />
+
+      {/* SHOWCASE: GPS MAP */}
+      <section className="py-20 sm:py-28 px-4 bg-white overflow-hidden">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col lg:flex-row items-center gap-10 lg:gap-20">
+            {/* Text */}
+            <RevealDiv direction="left" className="flex-1 space-y-6 lg:max-w-[480px]">
+              <div className="inline-flex items-center gap-2 bg-violet-50 border border-violet-200 text-violet-700 px-3.5 py-1.5 rounded-full text-xs font-semibold">
+                <MapPin className="w-3.5 h-3.5" /> Геолокация в реальном времени
+              </div>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900">
+                Видите каждого сотрудника<br />
+                <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">прямо на карте</span>
+              </h2>
+              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">
+                Начало смены фиксируется только при нахождении в радиусе объекта. Подтасовать данные невозможно — GPS-координаты проверяются автоматически в браузере телефона.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  'Геофенс-зоны с настраиваемым радиусом для каждого объекта',
+                  'PIN-коды вместо паролей — работает с первой попытки',
+                  'История каждой смены с точными временными метками',
+                ].map(text => (
+                  <li key={text} className="flex items-start gap-3 text-sm text-gray-600">
+                    <CheckCircle className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />{text}
+                  </li>
+                ))}
+              </ul>
+              <Button size="lg" className="h-11 px-6 text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200" onClick={() => navigate('/register')}>
+                Попробовать бесплатно <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </RevealDiv>
+            {/* Map Visual */}
+            <RevealDiv direction="right" className="flex-1 w-full max-w-md lg:max-w-xl">
+              <GpsMapMockup />
+            </RevealDiv>
+          </div>
+        </div>
+      </section>
+
+      {/* SHOWCASE: TELEGRAM */}
+      <section className="py-20 sm:py-28 px-4 bg-slate-50 overflow-hidden">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col lg:flex-row-reverse items-center gap-10 lg:gap-20">
+            {/* Text */}
+            <RevealDiv direction="right" className="flex-1 space-y-6 lg:max-w-[480px]">
+              <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 px-3.5 py-1.5 rounded-full text-xs font-semibold">
+                <Send className="w-3.5 h-3.5" /> Telegram-уведомления
+              </div>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900">
+                Узнаёте об опоздании<br />
+                <span className="bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">раньше клиента</span>
+              </h2>
+              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">
+                Никаких новых приложений. Алерты приходят прямо в Telegram — мессенджер, которым вы уже пользуетесь каждый день. Настройка за 2 минуты.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  'Мгновенный алерт при опоздании сотрудника',
+                  'Уведомление когда сотрудник покидает зону объекта',
+                  'Дневной и недельный сводный отчёт прямо в чат',
+                ].map(text => (
+                  <li key={text} className="flex items-start gap-3 text-sm text-gray-600">
+                    <CheckCircle className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />{text}
+                  </li>
+                ))}
+              </ul>
+            </RevealDiv>
+            {/* Telegram Chat Visual */}
+            <RevealDiv direction="left" className="flex-1 flex justify-center lg:justify-start">
+              <TelegramChatMockup />
+            </RevealDiv>
+          </div>
+        </div>
+      </section>
+
+      {/* SHOWCASE: REPORTS */}
+      <section className="py-20 sm:py-28 px-4 bg-white overflow-hidden">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col lg:flex-row items-center gap-10 lg:gap-20">
+            {/* Text */}
+            <RevealDiv direction="left" className="flex-1 space-y-6 lg:max-w-[480px]">
+              <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-3.5 py-1.5 rounded-full text-xs font-semibold">
+                <FileBarChart className="w-3.5 h-3.5" /> Умные отчёты
+              </div>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900">
+                Зарплатная ведомость<br />
+                <span className="bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">одним кликом</span>
+              </h2>
+              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">
+                Забудьте про Excel-таблицы и споры о часах. GeoTime автоматически считает рабочее время каждого сотрудника и формирует CSV-файл для зарплатной ведомости.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  'Фильтр по дням, неделям и месяцам',
+                  'Экспорт CSV — вставьте в Excel и готово',
+                  'Видите кто систематически нарушает режим',
+                ].map(text => (
+                  <li key={text} className="flex items-start gap-3 text-sm text-gray-600">
+                    <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />{text}
+                  </li>
+                ))}
+              </ul>
+              <Button size="lg" className="h-11 px-6 text-sm font-semibold bg-gradient-to-r from-green-500 to-emerald-600 hover:opacity-90 shadow-lg shadow-green-200" onClick={() => navigate('/register')}>
+                Начать бесплатно <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </RevealDiv>
+            {/* Reports Table Visual */}
+            <RevealDiv direction="right" className="flex-1 w-full max-w-md lg:max-w-xl">
+              <ReportsMockup />
+            </RevealDiv>
+          </div>
+        </div>
+      </section>
 
       {/* FEATURES */}
       <section className="py-16 px-4 bg-gray-50">
