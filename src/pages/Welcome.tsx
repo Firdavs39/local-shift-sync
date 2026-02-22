@@ -231,8 +231,323 @@ const PAIN_META = [
 
 const STEP_ICONS = [Building2, MapPin, FileBarChart];
 
+// ─── BILINGUAL DATA ───────────────────────────────────────────────────────────
+type CellVal = boolean | 'partial' | string;
+
+const CALC_T = {
+  ru: {
+    badge: '🧮 Калькулятор потерь',
+    title1: 'Считаем сколько вы теряете',
+    title2: 'прямо сейчас',
+    sub: 'В среднем каждый сотрудник приписывает 30 мин в день. Потяните слайдер — увидите свои потери.',
+    sliderLabel: 'Количество сотрудников',
+    unit: 'чел',
+    card1Label: 'Теряете в месяц',
+    card1Sub: (w: number) => `30 мин приписок × ${w} чел`,
+    card2Label: 'GeoTime стоит',
+    card2Sub: (w: number) => `10 000 сум × ${w} чел`,
+    card3Label: 'Экономия',
+    card3Sub: 'чистая прибыль в месяц',
+    roiLabel: (pct: number) => `GeoTime — всего ${pct}% от ваших потерь`,
+    roiBadge: (roi: number) => `⚡ ROI ${roi}× — окупается в ${roi} раз`,
+    legendLoss: 'Потери без контроля',
+    legendGeo: 'Стоимость GeoTime',
+    cta: (amt: string) => `Начать экономить ${amt} / мес`,
+    footnote: '* Средняя зарплата 2 500 000 сум/мес · 176 рабочих часов · 30 мин приписок/день на сотрудника',
+    currency: ' сум',
+  },
+  uz: {
+    badge: '🧮 Yo\'qotishlar kalkulyatori',
+    title1: 'Hozir qancha yo\'qotayotganingizni',
+    title2: 'hisoblaymiz',
+    sub: 'O\'rtacha har bir xodim kuniga 30 daqiqa qo\'shib yozadi. Slider ni torting — yo\'qotishlaringizni ko\'rasiz.',
+    sliderLabel: 'Xodimlar soni',
+    unit: 'kishi',
+    card1Label: 'Oyiga yo\'qotasiz',
+    card1Sub: (w: number) => `30 daqiqa × ${w} kishi`,
+    card2Label: 'GeoTime narxi',
+    card2Sub: (w: number) => `10 000 so\'m × ${w} kishi`,
+    card3Label: 'Tejash',
+    card3Sub: 'oylik sof foyda',
+    roiLabel: (pct: number) => `GeoTime — faqat ${pct}% yo\'qotishlaringizdan`,
+    roiBadge: (roi: number) => `⚡ ROI ${roi}× — ${roi} marta qoplanadi`,
+    legendLoss: 'Nazorat bo\'lmaganda yo\'qotish',
+    legendGeo: 'GeoTime narxi',
+    cta: (amt: string) => `${amt} / oy tejashni boshlash`,
+    footnote: '* O\'rtacha maosh 2 500 000 so\'m/oy · 176 ish soati · 30 daqiqa/kun xodim boshiga',
+    currency: ' so\'m',
+  },
+};
+
+const MARQUEE_T: Record<Lang, { icon: string; text: string; time: string }[]> = {
+  ru: [
+    { icon: '✅', text: 'Алишер К. начал смену · Объект №1',            time: '08:02' },
+    { icon: '⚠️', text: 'Бахром Ю. опоздал на 23 мин · Объект №2',     time: '08:31' },
+    { icon: '✅', text: 'Санжар М. прибыл · GPS подтверждён',            time: '07:58' },
+    { icon: '📊', text: 'Отчёт за неделю сформирован · CSV готов',       time: '18:00' },
+    { icon: '📲', text: 'Telegram-уведомление отправлено директору',     time: '08:31' },
+    { icon: '✅', text: 'Дилшод А. завершил смену · 8ч 02мин',           time: '17:04' },
+    { icon: '✅', text: 'Улугбек Р. открыл смену вовремя',               time: '09:00' },
+    { icon: '⏰', text: 'Автозакрытие смен · 5 сотрудников',              time: '18:00' },
+    { icon: '⚠️', text: 'Нодир Т. вышел из зоны объекта',               time: '14:22' },
+    { icon: '✅', text: 'Жамшид Х. на объекте · 3-й день без опозданий', time: '08:00' },
+  ],
+  uz: [
+    { icon: '✅', text: "Alisher K. smenani boshladi · Ob'ekt №1",       time: '08:02' },
+    { icon: '⚠️', text: "Bahrom Yu. 23 daqiqa kechikdi · Ob'ekt №2",    time: '08:31' },
+    { icon: '✅', text: 'Sanjar M. keldi · GPS tasdiqlandi',              time: '07:58' },
+    { icon: '📊', text: 'Haftalik hisobot yaratildi · CSV tayyor',        time: '18:00' },
+    { icon: '📲', text: 'Telegram xabarnomasi direkturga yuborildi',      time: '08:31' },
+    { icon: '✅', text: "Dilshod A. smenani tugatdi · 8s 02d",            time: '17:04' },
+    { icon: '✅', text: "Ulug'bek R. smenani o'z vaqtida ochdi",          time: '09:00' },
+    { icon: '⏰', text: 'Smenalarni avtoyopish · 5 xodim',                time: '18:00' },
+    { icon: '⚠️', text: "Nodir T. ob'ekt zonasidan chiqdi",              time: '14:22' },
+    { icon: '✅', text: "Jamshid X. ob'ektda · 3-kun kechikmasdan",       time: '08:00' },
+  ],
+};
+
+type CompRow = { feature: string; excel: CellVal; other: CellVal; geo: CellVal };
+type CompLang = {
+  badge: string; title: string; sub: string;
+  featCol: string; excelCol: string; otherCol: string;
+  legendYes: string; legendNo: string; legendPartial: string;
+  rows: CompRow[];
+};
+const COMP_T: Record<Lang, CompLang> = {
+  ru: {
+    badge: '⚖️ Сравнение решений',
+    title: 'GeoTime vs альтернативы',
+    sub: 'Честное сравнение с Excel и дорогими HR-системами',
+    featCol: 'Возможность', excelCol: '📋 Excel /\nБумага', otherCol: '💼 Другие\nсистемы',
+    legendYes: 'Поддерживается', legendNo: 'Не поддерживается', legendPartial: 'Частично',
+    rows: [
+      { feature: 'Геолокация при старте смены',         excel: false,            other: 'partial',       geo: true            },
+      { feature: 'Нельзя подделать время прихода',       excel: false,            other: 'partial',       geo: true            },
+      { feature: 'Telegram-алерты об опоздании',         excel: false,            other: 'partial',       geo: true            },
+      { feature: 'Без установки приложения',              excel: false,            other: false,           geo: true            },
+      { feature: 'Запуск без IT-специалиста',             excel: true,             other: false,           geo: true            },
+      { feature: 'Экспорт CSV для зарплаты',              excel: false,            other: true,            geo: true            },
+      { feature: 'Время внедрения',                       excel: '∞ ручной труд',  other: '1–3 месяца',    geo: '10 минут ⚡'    },
+      { feature: 'Цена · 20 сотрудников / мес',           excel: 'Скрытые потери', other: '250 000+ сум',  geo: '200 000 сум ✅' },
+    ],
+  },
+  uz: {
+    badge: '⚖️ Yechimlar taqqoslanmasi',
+    title: 'GeoTime vs muqobillar',
+    sub: "Excel va qimmat HR-tizimlari bilan to'g'ri taqqoslash",
+    featCol: 'Imkoniyat', excelCol: "📋 Excel /\nQog'oz", otherCol: '💼 Boshqa\ntizimlar',
+    legendYes: "Qo'llab-quvvatlanadi", legendNo: "Qo'llab-quvvatlanmaydi", legendPartial: 'Qisman',
+    rows: [
+      { feature: 'Smena boshida geolokatsiya',                    excel: false,                  other: 'partial',         geo: true               },
+      { feature: 'Kelish vaqtini soxtalashtirish mumkin emas',    excel: false,                  other: 'partial',         geo: true               },
+      { feature: 'Kechikish haqida Telegram xabarnomasi',         excel: false,                  other: 'partial',         geo: true               },
+      { feature: "Ilova o'rnatmasdan",                            excel: false,                  other: false,             geo: true               },
+      { feature: 'IT mutaxassissiz ishga tushirish',              excel: true,                   other: false,             geo: true               },
+      { feature: "Ish haqi uchun CSV eksport",                    excel: false,                  other: true,              geo: true               },
+      { feature: 'Joriy etish vaqti',                             excel: "∞ qo'l mehnati",       other: '1–3 oy',          geo: '10 daqiqa ⚡'      },
+      { feature: 'Narx · 20 xodim / oy',                         excel: "Yashirin yo'qotish",   other: "250 000+ so'm",   geo: "200 000 so'm ✅"  },
+    ],
+  },
+};
+
+type IndustryItem = {
+  id: string; icon: string; label: string; headline: string; sub: string;
+  metrics: { v: string; l: string }[]; points: string[];
+};
+const IND_T: Record<Lang, IndustryItem[]> = {
+  ru: [
+    {
+      id: 'security', icon: '🛡️', label: 'Охрана',
+      headline: 'Объект не охраняется — вы знаете первым',
+      sub: 'Охранники на нескольких объектах — опоздание любого из них риск для клиента и вашей репутации. GeoTime сообщает об этом через секунду, не через час.',
+      metrics: [{ v: '< 1 с', l: 'Задержка алерта' }, { v: '100%', l: 'GPS-контроль' }, { v: '−30%', l: 'Приписок' }],
+      points: ['Объект не охраняется — мгновенный Telegram-алерт', 'Охранник вышел из зоны — директор видит сразу', 'История смен с координатами для отчёта клиенту'],
+    },
+    {
+      id: 'construction', icon: '🏗️', label: 'Строительство',
+      headline: 'Пять объектов — один экран контроля',
+      sub: 'Бригады на разных стройках, субподрядчики, ранние смены. GeoTime заменяет прораба-наблюдателя и устраняет споры по зарплате раз и навсегда.',
+      metrics: [{ v: '5+', l: 'Объектов сразу' }, { v: '1 клик', l: 'Отчёт бригады' }, { v: '−2 ч', l: 'На учёт в день' }],
+      points: ['Прораб видит все бригады на разных стройках', 'Нет споров — часы считаются автоматически', 'CSV-ведомость для расчёта зарплаты за минуту'],
+    },
+    {
+      id: 'cleaning', icon: '🧹', label: 'Клининг',
+      headline: 'Уборщица не пришла — клиент не позвонит',
+      sub: 'Клиент звонит когда объект не убран. С GeoTime вы узнаёте об отсутствии через секунды — до того, как клиент заметил.',
+      metrics: [{ v: '<1 мин', l: 'До алерта вам' }, { v: '20+', l: 'Объектов' }, { v: '0', l: 'Необъяснённых смен' }],
+      points: ['Уборщица не на месте — вы уже знаете', 'История смен по каждому клиентскому объекту', 'Прозрачный учёт для почасовых сотрудников'],
+    },
+    {
+      id: 'courier', icon: '🚚', label: 'Курьеры',
+      headline: 'Смена — только с нужной точки, не из дома',
+      sub: 'Курьеры не могут начать смену из дома и приписать лишние часы. Работает в браузере любого смартфона без отдельного приложения.',
+      metrics: [{ v: '10 мин', l: 'Старт с нуля' }, { v: 'Любой', l: 'Смартфон' }, { v: '+20%', l: 'Пунктуальность' }],
+      points: ['Смена только с GPS-координат точки старта', 'Работает в браузере — не нужен отдельный трекер', 'Директор видит кто выехал, кто ещё нет'],
+    },
+  ],
+  uz: [
+    {
+      id: 'security', icon: '🛡️', label: "Qo'riqlash",
+      headline: "Ob'ekt qo'riqlanmayapti — siz birinchi bilasiz",
+      sub: "Bir nechta ob'ektdagi qo'riqchilar — ulardan birining kechikishi mijoz va reputatsiyangiz uchun xavf. GeoTime bu haqda bir soat emas, bir soniyada xabar beradi.",
+      metrics: [{ v: '< 1 s', l: 'Xabar kechikishi' }, { v: '100%', l: 'GPS nazorat' }, { v: '−30%', l: "Qo'shimchalar" }],
+      points: ["Ob'ekt qo'riqlanmayapti — darhol Telegram xabarnomasi", "Qo'riqchi zonadan chiqdi — direktor darhol ko'radi", "Mijoz uchun hisobotda koordinatali smena tarixi"],
+    },
+    {
+      id: 'construction', icon: '🏗️', label: 'Qurilish',
+      headline: "Beshta ob'ekt — bitta nazorat ekrani",
+      sub: "Turli qurilishlardagi brigadalar, subpudratchilar, erta smenalar. GeoTime kuzatuvchi ustani almashtiradi va ish haqi bo'yicha nizolarni butunlay yo'q qiladi.",
+      metrics: [{ v: '5+', l: "Bir vaqtda ob'ektlar" }, { v: '1 klik', l: 'Brigada hisoboti' }, { v: '−2 s', l: 'Kunlik hisob uchun' }],
+      points: ["Usta turli qurilishlardagi barcha brigadalarni ko'radi", "Nizolar yo'q — soatlar avtomatik hisoblanadi", "Bir daqiqada ish haqi hisoblash uchun CSV-jadval"],
+    },
+    {
+      id: 'cleaning', icon: '🧹', label: 'Tozalash',
+      headline: "Farrosh kelmadi — mijoz qo'ng'iroq qilmaydi",
+      sub: "Ob'ekt tozalanmasa mijoz qo'ng'iroq qiladi. GeoTime bilan siz buni mijoz sezmasidan oldin soniyalar ichida bilasiz.",
+      metrics: [{ v: '<1 min', l: 'Xabargacha' }, { v: '20+', l: "Ob'ektlar" }, { v: '0', l: 'Tushunarsiz smenalar' }],
+      points: ["Farrosh o'z joyida emas — siz allaqachon bilasiz", "Har bir mijoz ob'ekti bo'yicha smena tarixi", "Soatbay xodimlar uchun shaffof hisoblash"],
+    },
+    {
+      id: 'courier', icon: '🚚', label: 'Kurierlar',
+      headline: 'Smena — faqat kerakli nuqtadan, uydan emas',
+      sub: "Kurierlar uydan smena boshlab ortiqcha soatlarni qo'sha olmaydi. Alohida ilova kerak emas — istalgan smartfonning brauzerida ishlaydi.",
+      metrics: [{ v: '10 min', l: 'Noldan ishga tushirish' }, { v: 'Har qanday', l: 'Smartfon' }, { v: '+20%', l: 'Vaqtga rioya' }],
+      points: ["Smena faqat boshlash nuqtasining GPS-koordinatalarida", "Brauzerda ishlaydi — alohida tracker kerak emas", "Direktor kim yo'lga chiqqanini, kim hali yo'qligini ko'radi"],
+    },
+  ],
+};
+
+type TestimonialItem = {
+  text: string; name: string; role: string; city: string;
+  metric: string; metricLabel: string; init: string; grad: string;
+};
+const TEST_T: Record<Lang, TestimonialItem[]> = {
+  ru: [
+    { text: '"Раньше бригадиры записывали время в тетрадь — постоянные споры по зарплате. Теперь всё прозрачно: кто пришёл, во сколько, сколько отработал. Экономим минимум 2 часа в день на учёте."', name: 'Руслан А.', role: 'Охранное предприятие', city: 'Ташкент', metric: '−2 ч/день', metricLabel: 'на ручной учёт', init: 'РА', grad: 'from-violet-500 to-indigo-500' },
+    { text: '"У нас 5 строительных объектов по городу. Раньше звонили каждому прорабу чтобы узнать кто пришёл. Сейчас открываю GeoTime — вижу всё сразу. Внедрили за день без IT-специалиста."', name: 'Санжар Т.', role: 'Строительная компания', city: 'Ташкент', metric: '5 объектов', metricLabel: 'под контролем', init: 'СТ', grad: 'from-orange-400 to-amber-500' },
+    { text: '"Клининговый бизнес — это десятки объектов и почасовые сотрудники. GeoTime решил проблему приписок и споров. Теперь у меня чёткие данные для расчёта зарплаты каждому сотруднику."', name: 'Нилуфар К.', role: 'Клининговый сервис', city: 'Самарканд', metric: '30+ объектов', metricLabel: 'под контролем', init: 'НК', grad: 'from-pink-500 to-rose-500' },
+    { text: '"Курьеры начали работать честнее. Они знают что смена фиксирует GPS — нет больше «я уже выехал» когда он ещё дома. Внедрение заняло 10 минут. Платим только за реальные часы."', name: 'Баходир У.', role: 'Служба доставки', city: 'Ташкент', metric: '+20%', metricLabel: 'пунктуальность', init: 'БУ', grad: 'from-green-500 to-emerald-500' },
+  ],
+  uz: [
+    { text: '"Ilgari brigadirlar vaqtni daftarga yozishardi — doimiy ish haqi nizolari. Endi hammasi shaffof: kim keldi, soat nechada, necha soat ishladi. Hisobda kuniga kamida 2 soat tejayapmiz."', name: 'Ruslan A.', role: "Qo'riqlash korxonasi", city: 'Toshkent', metric: '−2 s/kun', metricLabel: "qo'l hisobiga", init: 'РА', grad: 'from-violet-500 to-indigo-500' },
+    { text: "\"Shaharda 5 ta qurilish ob'ektimiz bor. Oldin kim kelganini bilish uchun har bir ustaga qo'ng'iroq qilardik. Endi GeoTime ni ochdim — hamma narsani ko'ryapman. IT mutaxassisisiz bir kunda joriy etildi.\"", name: 'Sanjar T.', role: 'Qurilish kompaniyasi', city: 'Toshkent', metric: "5 ob'ekt", metricLabel: 'nazorat ostida', init: 'СТ', grad: 'from-orange-400 to-amber-500' },
+    { text: "\"Tozalash biznesi — o'nlab ob'ektlar va soatbay xodimlar. GeoTime qo'shimcha yozuvlar va nizolar muammosini hal qildi. Endi har bir xodimga ish haqi hisoblash uchun aniq ma'lumotlarim bor.\"", name: 'Nilufar K.', role: 'Tozalash xizmati', city: 'Samarqand', metric: "30+ ob'ekt", metricLabel: 'nazorat ostida', init: 'НК', grad: 'from-pink-500 to-rose-500' },
+    { text: "\"Kurierlar halolroq ishlashni boshladi. Ular smena GPS ni qayd etishini bilishadi — endi «men allaqachon yo'lga chiqdim» bahonasi yo'q. Joriy etish 10 daqiqa davom etdi. Faqat haqiqiy soatlar uchun to'laymiz.\"", name: 'Bahodir U.', role: 'Yetkazib berish xizmati', city: 'Toshkent', metric: '+20%', metricLabel: 'vaqtga rioya', init: 'БУ', grad: 'from-green-500 to-emerald-500' },
+  ],
+};
+
+const SHOWCASE_T = {
+  ru: {
+    gps: {
+      badge: 'Геолокация в реальном времени',
+      h1: 'Видите каждого сотрудника', h2: 'прямо на карте',
+      p: 'Начало смены фиксируется только при нахождении в радиусе объекта. Подтасовать данные невозможно — GPS-координаты проверяются автоматически в браузере телефона.',
+      bullets: ['Геофенс-зоны с настраиваемым радиусом для каждого объекта', 'PIN-коды вместо паролей — работает с первой попытки', 'История каждой смены с точными временными метками'],
+      btn: 'Попробовать бесплатно',
+    },
+    telegram: {
+      badge: 'Telegram-уведомления',
+      h1: 'Узнаёте об опоздании', h2: 'раньше клиента',
+      p: 'Никаких новых приложений. Алерты приходят прямо в Telegram — мессенджер, которым вы уже пользуетесь каждый день. Настройка за 2 минуты.',
+      bullets: ['Мгновенный алерт при опоздании сотрудника', 'Уведомление когда сотрудник покидает зону объекта', 'Дневной и недельный сводный отчёт прямо в чат'],
+    },
+    reports: {
+      badge: 'Умные отчёты',
+      h1: 'Зарплатная ведомость', h2: 'одним кликом',
+      p: 'Забудьте про Excel-таблицы и споры о часах. GeoTime автоматически считает рабочее время каждого сотрудника и формирует CSV-файл для зарплатной ведомости.',
+      bullets: ['Фильтр по дням, неделям и месяцам', 'Экспорт CSV — вставьте в Excel и готово', 'Видите кто систематически нарушает режим'],
+      btn: 'Начать бесплатно',
+    },
+    ind: { badge: '🏢 По отраслям', title: 'Для вашей сферы бизнеса', sub: 'GeoTime — для любого бизнеса с выездными сотрудниками' },
+  },
+  uz: {
+    gps: {
+      badge: 'Geolokatsiya real vaqtda',
+      h1: "Har bir xodimni ko'rasiz", h2: "xaritada to'g'ridan-to'g'ri",
+      p: "Smenani faqat ob'ekt radiusida bo'lganingizda boshlash mumkin. Ma'lumotlarni soxtalashtirish mumkin emas — GPS-koordinatalar telefon brauzerida avtomatik tekshiriladi.",
+      bullets: ["Har bir ob'ekt uchun sozlanadigan radiusli geofens-zonalar", "Parollar o'rniga PIN-kodlar — birinchi urinishdan ishlaydi", "Aniq vaqt belgilari bilan har bir smenaning tarixi"],
+      btn: "Bepul sinab ko'rish",
+    },
+    telegram: {
+      badge: 'Telegram xabarnomalar',
+      h1: 'Kechikish haqida', h2: 'mijozdan oldin bilasiz',
+      p: "Hech qanday yangi ilova kerak emas. Xabarnomalar to'g'ridan-to'g'ri Telegram ga keladi — siz allaqachon har kuni foydalanadigan messenger. 2 daqiqada sozlash.",
+      bullets: ["Xodim kechikganda darhol xabar", "Xodim ob'ekt zonasidan chiqqanda xabarnoma", "Kunlik va haftalik umumiy hisobot to'g'ridan-to'g'ri chatga"],
+    },
+    reports: {
+      badge: 'Aqlli hisobotlar',
+      h1: 'Ish haqi jadvali', h2: 'bir klik bilan',
+      p: "Excel-jadvallar va soatlar bo'yicha nizolarni unuting. GeoTime har bir xodimning ish vaqtini avtomatik hisoblab, ish haqi jadvali uchun CSV fayl yaratadi.",
+      bullets: ["Kunlar, haftalar va oylar bo'yicha filtr", "CSV eksporti — Excel ga joylashtiring va tayyor", "Kim muntazam tartibni buzishini ko'rasiz"],
+      btn: 'Bepul boshlash',
+    },
+    ind: { badge: "🏢 Sohalar bo'yicha", title: 'Sizning biznes sohangiiz uchun', sub: "GeoTime — ko'chma xodimlari bo'lgan har qanday biznes uchun" },
+  },
+};
+
+const GPS_MOCK_T = {
+  ru: { zone: 'Объект №1 · Чиланзар', ak: '✓ 08:02 вовремя', by: '⚠ Опоздание +23 мин', live: 'Live · 3 сотрудника', inZone: '2 в зоне', late1: '1 опоздал', city: 'Ташкент, Чиланзар' },
+  uz: { zone: "Ob'ekt №1 · Chilonzor", ak: "✓ 08:02 o'z vaqtida", by: '⚠ Kechikish +23 daq', live: 'Live · 3 xodim', inZone: '2 ta zonada', late1: '1 kechikdi', city: 'Toshkent, Chilonzor' },
+};
+
+const TELE_MOCK_T = {
+  ru: {
+    online: 'всегда онлайн',
+    msgs: [
+      { text: '✅ Алишер К. начал смену\n📍 Объект №1 · Чиланзар\n🕐 08:02 — вовремя', time: '08:02' },
+      { text: '⚠️ Бахром Ю. опоздал на 23 мин\n📍 Объект №2 · Юнусабад\n🕐 Должен быть в 08:00', time: '08:31' },
+    ],
+    report: '📊 Дневной отчёт готов\n22 смены · 1 опоздание\nСкачать CSV ⬇️',
+  },
+  uz: {
+    online: 'doim onlayn',
+    msgs: [
+      { text: "✅ Alisher K. smenani boshladi\n📍 Ob'ekt №1 · Chilonzor\n🕐 08:02 — o'z vaqtida", time: '08:02' },
+      { text: "⚠️ Bahrom Yu. 23 daqiqa kechikdi\n📍 Ob'ekt №2 · Yunusobod\n🕐 08:00 da bo'lishi kerak edi", time: '08:31' },
+    ],
+    report: '📊 Kunlik hisobot tayyor\n22 smena · 1 kechikish\nCSV ni yuklab olish ⬇️',
+  },
+};
+
+const REPORT_MOCK_T = {
+  ru: {
+    title: 'Отчёт · Февраль 2025', sub: '4 сотрудника · Объект №1',
+    colWorker: 'Сотрудник', colDays: 'Дней', colHours: 'Часы', colStatus: 'Статус',
+    good: '✓ Отлично', late: (n: number) => `${n}× поздно`,
+    footer: 'Итого: 685 ч · Среднее: 171 ч', pdf: 'Скачать PDF →',
+  },
+  uz: {
+    title: "Hisobot · Fevral 2025", sub: "4 xodim · Ob'ekt №1",
+    colWorker: 'Xodim', colDays: 'Kun', colHours: 'Soat', colStatus: 'Holat',
+    good: "✓ A'lo", late: (n: number) => `${n}× kechikdi`,
+    footer: "Jami: 685 s · O'rtacha: 171 s", pdf: 'PDF yuklab olish →',
+  },
+};
+
+const APP_MOCK_T = {
+  ru: {
+    notifTitle: 'Telegram уведомление', notifSub: 'Бахром Ю. опоздал на 23 мин',
+    workers: [
+      { name: 'Алишер К.', site: 'Объект №1', time: '08:02', ok: true, late: '' },
+      { name: 'Бахром Ю.', site: 'Объект №2', time: '08:31', ok: false, late: '23 мин' },
+      { name: 'Санжар М.', site: 'Объект №1', time: '07:58', ok: true, late: '' },
+    ],
+    onTime: '✓ Вовремя', online: '● 3 онлайн', report: 'Открыть отчёт →',
+  },
+  uz: {
+    notifTitle: 'Telegram xabarnomasi', notifSub: 'Bahrom Yu. 23 daqiqa kechikdi',
+    workers: [
+      { name: 'Alisher K.', site: "Ob'ekt №1", time: '08:02', ok: true, late: '' },
+      { name: 'Bahrom Yu.', site: "Ob'ekt №2", time: '08:31', ok: false, late: '23 daq' },
+      { name: 'Sanjar M.', site: "Ob'ekt №1", time: '07:58', ok: true, late: '' },
+    ],
+    onTime: "✓ O'z vaqtida", online: '● 3 onlayn', report: "Hisobotni ochish →",
+  },
+};
+
 // ─── LOSS CALCULATOR ──────────────────────────────────────────────────────────
-const Calculator = () => {
+const Calculator = ({ lang }: { lang: Lang }) => {
+  const ct = CALC_T[lang];
   const [workers, setWorkers] = useState(30);
   const [animKey, setAnimKey] = useState(0);
 
@@ -250,7 +565,7 @@ const Calculator = () => {
   const pct        = Math.max(2, Math.round((geoCost / totalLoss) * 100));
   const filled     = Math.round(((workers - 5) / 195) * 100);
 
-  const fmt = (n: number) => n.toLocaleString('ru-RU') + ' сум';
+  const fmt = (n: number) => n.toLocaleString('ru-RU') + ct.currency;
   const pop: React.CSSProperties = { animation: 'geotime-num-pop 0.42s cubic-bezier(.4,0,.2,1) forwards' };
 
   return (
@@ -265,15 +580,13 @@ const Calculator = () => {
       <div className="relative z-10 max-w-3xl mx-auto">
         <div className="text-center mb-12 space-y-4">
           <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 text-violet-300 px-4 py-1.5 rounded-full text-xs font-medium">
-            🧮 Калькулятор потерь
+            {ct.badge}
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
-            Считаем сколько вы теряете<br />
-            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">прямо сейчас</span>
+            {ct.title1}<br />
+            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">{ct.title2}</span>
           </h2>
-          <p className="text-slate-400 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
-            В среднем каждый сотрудник приписывает 30 мин в день. Потяните слайдер — увидите свои потери.
-          </p>
+          <p className="text-slate-400 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">{ct.sub}</p>
         </div>
 
         <div className="bg-white/[0.06] backdrop-blur-2xl border border-white/[0.1] rounded-3xl p-8 shadow-2xl space-y-8">
@@ -281,10 +594,10 @@ const Calculator = () => {
           {/* Slider */}
           <div className="space-y-5">
             <div className="flex items-center justify-between">
-              <span className="text-slate-300 text-sm font-medium">Количество сотрудников</span>
+              <span className="text-slate-300 text-sm font-medium">{ct.sliderLabel}</span>
               <div className="bg-violet-500/25 border border-violet-400/35 rounded-xl px-4 py-1.5">
                 <span className="text-white font-extrabold text-xl tabular-nums">{workers}</span>
-                <span className="text-violet-300 text-sm ml-1.5">чел</span>
+                <span className="text-violet-300 text-sm ml-1.5">{ct.unit}</span>
               </div>
             </div>
             <input
@@ -302,25 +615,25 @@ const Calculator = () => {
           <div className="grid grid-cols-3 gap-4 items-stretch">
             <div className="bg-red-500/12 border border-red-500/20 rounded-2xl p-5 text-center space-y-2">
               <div className="text-3xl">💸</div>
-              <div className="text-red-300/80 text-[11px] font-semibold uppercase tracking-widest">Теряете в месяц</div>
+              <div className="text-red-300/80 text-[11px] font-semibold uppercase tracking-widest">{ct.card1Label}</div>
               <div key={`l${animKey}`} className="text-red-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(totalLoss)}</div>
-              <div className="text-red-400/60 text-[11px]">30 мин приписок × {workers} чел</div>
+              <div className="text-red-400/60 text-[11px]">{ct.card1Sub(workers)}</div>
             </div>
 
             <div className="bg-emerald-500/12 border border-emerald-500/20 rounded-2xl p-5 text-center space-y-2">
               <div className="text-3xl">✅</div>
-              <div className="text-emerald-300/80 text-[11px] font-semibold uppercase tracking-widest">GeoTime стоит</div>
+              <div className="text-emerald-300/80 text-[11px] font-semibold uppercase tracking-widest">{ct.card2Label}</div>
               <div key={`c${animKey}`} className="text-emerald-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(geoCost)}</div>
-              <div className="text-emerald-400/60 text-[11px]">10 000 сум × {workers} чел</div>
+              <div className="text-emerald-400/60 text-[11px]">{ct.card2Sub(workers)}</div>
             </div>
 
             <div className="bg-violet-500/15 border border-violet-400/25 rounded-2xl relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent pointer-events-none" />
               <div className="relative z-10 p-5 text-center space-y-2">
                 <div className="text-3xl">💰</div>
-                <div className="text-violet-300/80 text-[11px] font-semibold uppercase tracking-widest">Экономия</div>
+                <div className="text-violet-300/80 text-[11px] font-semibold uppercase tracking-widest">{ct.card3Label}</div>
                 <div key={`s${animKey}`} className="text-violet-100 font-extrabold text-xl leading-snug" style={pop}>{fmt(savings)}</div>
-                <div className="text-violet-400/60 text-[11px]">чистая прибыль в месяц</div>
+                <div className="text-violet-400/60 text-[11px]">{ct.card3Sub}</div>
               </div>
             </div>
           </div>
@@ -328,9 +641,13 @@ const Calculator = () => {
           {/* ROI Bar */}
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-              <span>GeoTime — всего <span className="text-white font-bold">{pct}%</span> от ваших потерь</span>
+              <span>
+                {ct.roiLabel(pct).split(pct + '%')[0]}
+                <span className="text-white font-bold">{pct}%</span>
+                {ct.roiLabel(pct).split(pct + '%')[1]}
+              </span>
               <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 text-amber-300 px-3 py-1 rounded-full text-[11px] font-semibold">
-                ⚡ ROI {roi}× — окупается в {roi} раз
+                {ct.roiBadge(roi)}
               </div>
             </div>
             <div className="h-5 bg-white/[0.07] rounded-full overflow-hidden relative">
@@ -343,8 +660,8 @@ const Calculator = () => {
               </div>
             </div>
             <div className="flex items-center gap-5 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500/70 shrink-0" />Потери без контроля</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0" />Стоимость GeoTime</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500/70 shrink-0" />{ct.legendLoss}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0" />{ct.legendGeo}</span>
             </div>
           </div>
 
@@ -353,35 +670,20 @@ const Calculator = () => {
             className="w-full h-14 text-base font-bold bg-gradient-to-r from-violet-500 to-indigo-500 hover:opacity-90 shadow-xl shadow-violet-900/60 border-0 rounded-2xl"
             onClick={() => window.location.href = '/register'}
           >
-            Начать экономить {fmt(savings)} / мес
+            {ct.cta(fmt(savings))}
             <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
 
-        <p className="text-center text-slate-600 text-[11px] mt-5">
-          * Средняя зарплата 2 500 000 сум/мес · 176 рабочих часов · 30 мин приписок/день на сотрудника
-        </p>
+        <p className="text-center text-slate-600 text-[11px] mt-5">{ct.footnote}</p>
       </div>
     </section>
   );
 };
 
 // ─── MARQUEE ──────────────────────────────────────────────────────────────────
-const MARQUEE_ITEMS = [
-  { icon: '✅', text: 'Алишер К. начал смену · Объект №1',           time: '08:02' },
-  { icon: '⚠️', text: 'Бахром Ю. опоздал на 23 мин · Объект №2',    time: '08:31' },
-  { icon: '✅', text: 'Санжар М. прибыл · GPS подтверждён',           time: '07:58' },
-  { icon: '📊', text: 'Отчёт за неделю сформирован · CSV готов',      time: '18:00' },
-  { icon: '📲', text: 'Telegram-уведомление отправлено директору',    time: '08:31' },
-  { icon: '✅', text: 'Дилшод А. завершил смену · 8ч 02мин',          time: '17:04' },
-  { icon: '✅', text: 'Улугбек Р. открыл смену вовремя',              time: '09:00' },
-  { icon: '⏰', text: 'Автозакрытие смен · 5 сотрудников',             time: '18:00' },
-  { icon: '⚠️', text: 'Нодир Т. вышел из зоны объекта',              time: '14:22' },
-  { icon: '✅', text: 'Жамшид Х. на объекте · 3-й день без опозданий', time: '08:00' },
-];
-
-const NotifMarquee = () => {
-  const doubled = [...MARQUEE_ITEMS, ...MARQUEE_ITEMS];
+const NotifMarquee = ({ lang }: { lang: Lang }) => {
+  const doubled = [...MARQUEE_T[lang], ...MARQUEE_T[lang]];
   return (
     <div className="overflow-hidden bg-white border-y border-gray-100 py-3 relative">
       <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
@@ -490,12 +792,8 @@ const StatsRow = ({ stats }: { stats: readonly { value: string; label: string }[
 };
 
 // ─── APP MOCKUP ───────────────────────────────────────────────────────────────
-const MOCK_WORKERS = [
-  { name: 'Алишер К.', site: 'Объект №1', time: '08:02', ok: true },
-  { name: 'Бахром Ю.', site: 'Объект №2', time: '08:31', ok: false, late: '23 мин' },
-  { name: 'Санжар М.', site: 'Объект №1', time: '07:58', ok: true },
-];
-const AppMockup = () => {
+const AppMockup = ({ lang }: { lang: Lang }) => {
+  const am = APP_MOCK_T[lang];
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 3800);
@@ -513,8 +811,8 @@ const AppMockup = () => {
         <div className="bg-white border border-orange-200 rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center gap-2.5 whitespace-nowrap">
           <span className="text-base">📲</span>
           <div>
-            <div className="text-[11px] font-semibold text-gray-700">Telegram уведомление</div>
-            <div className="text-[11px] text-orange-600 font-medium">Бахром Ю. опоздал на 23 мин</div>
+            <div className="text-[11px] font-semibold text-gray-700">{am.notifTitle}</div>
+            <div className="text-[11px] text-orange-600 font-medium">{am.notifSub}</div>
           </div>
         </div>
       </div>
@@ -541,7 +839,7 @@ const AppMockup = () => {
 
         {/* Workers */}
         <div className="divide-y divide-gray-50">
-          {MOCK_WORKERS.map((w, i) => (
+          {am.workers.map((w, i) => (
             <div key={i} className="px-4 py-3 flex items-center gap-3">
               <div className="relative shrink-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${w.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
@@ -560,7 +858,7 @@ const AppMockup = () => {
                 <div className="flex items-center justify-between mt-0.5">
                   <span className="text-[11px] text-gray-400">{w.site}</span>
                   {w.ok
-                    ? <span className="text-[11px] text-green-600 font-medium">✓ Вовремя</span>
+                    ? <span className="text-[11px] text-green-600 font-medium">{am.onTime}</span>
                     : <span className="text-[11px] text-red-500 font-medium">⚠ +{w.late}</span>
                   }
                 </div>
@@ -571,8 +869,8 @@ const AppMockup = () => {
 
         {/* Footer */}
         <div className="bg-violet-50 px-4 py-2.5 flex items-center justify-between border-t border-violet-100">
-          <span className="text-[11px] text-violet-500">● 3 онлайн</span>
-          <span className="text-[11px] text-violet-700 font-semibold">Открыть отчёт →</span>
+          <span className="text-[11px] text-violet-500">{am.online}</span>
+          <span className="text-[11px] text-violet-700 font-semibold">{am.report}</span>
         </div>
       </div>
     </div>
@@ -580,18 +878,6 @@ const AppMockup = () => {
 };
 
 // ─── COMPARISON TABLE ─────────────────────────────────────────────────────────
-type CellVal = boolean | 'partial' | string;
-
-const COMP_ROWS: { feature: string; excel: CellVal; other: CellVal; geo: CellVal }[] = [
-  { feature: 'Геолокация при старте смены',         excel: false,            other: 'partial',       geo: true           },
-  { feature: 'Нельзя подделать время прихода',       excel: false,            other: 'partial',       geo: true           },
-  { feature: 'Telegram-алерты об опоздании',         excel: false,            other: 'partial',       geo: true           },
-  { feature: 'Без установки приложения',              excel: false,            other: false,           geo: true           },
-  { feature: 'Запуск без IT-специалиста',             excel: true,             other: false,           geo: true           },
-  { feature: 'Экспорт CSV для зарплаты',              excel: false,            other: true,            geo: true           },
-  { feature: 'Время внедрения',                       excel: '∞ ручной труд',  other: '1–3 месяца',    geo: '10 минут ⚡'   },
-  { feature: 'Цена · 20 сотрудников / мес',           excel: 'Скрытые потери', other: '250 000+ сум',  geo: '200 000 сум ✅'},
-];
 
 const CompCell = ({ val, isGeo = false }: { val: CellVal; isGeo?: boolean }) => {
   if (val === true) return (
@@ -618,34 +904,33 @@ const CompCell = ({ val, isGeo = false }: { val: CellVal; isGeo?: boolean }) => 
   return <span className={`text-[11px] text-center leading-tight ${isGeo ? 'text-violet-800 font-semibold' : 'text-gray-500'}`}>{val}</span>;
 };
 
-const ComparisonTable = () => {
+const ComparisonTable = ({ lang }: { lang: Lang }) => {
+  const ct = COMP_T[lang];
   const { ref, visible } = useScrollReveal(0.08);
   return (
     <section className="py-20 sm:py-24 px-4 bg-gray-50">
       <div className="max-w-4xl mx-auto">
         <RevealDiv className="text-center mb-10 space-y-3">
           <div className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm">
-            ⚖️ Сравнение решений
+            {ct.badge}
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
-            GeoTime vs <span className="text-gray-400 font-light">альтернативы</span>
+            {ct.title.split(' vs ')[0]} vs <span className="text-gray-400 font-light">{ct.title.split(' vs ')[1]}</span>
           </h2>
-          <p className="text-gray-500 text-sm sm:text-base max-w-lg mx-auto">
-            Честное сравнение с Excel и дорогими HR-системами
-          </p>
+          <p className="text-gray-500 text-sm sm:text-base max-w-lg mx-auto">{ct.sub}</p>
         </RevealDiv>
 
         <div ref={ref} className="rounded-3xl overflow-hidden border border-gray-200 shadow-xl bg-white">
           {/* Column headers */}
           <div className="grid" style={{ gridTemplateColumns: '1.6fr 1fr 1fr 1fr' }}>
             <div className="px-5 py-4 bg-gray-50 border-b border-r border-gray-100">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Возможность</span>
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{ct.featCol}</span>
             </div>
             <div className="px-3 py-4 bg-gray-50 border-b border-r border-gray-100 text-center">
-              <div className="text-[11px] font-semibold text-gray-500 leading-tight">📋 Excel /<br />Бумага</div>
+              <div className="text-[11px] font-semibold text-gray-500 leading-tight whitespace-pre-line">{ct.excelCol}</div>
             </div>
             <div className="px-3 py-4 bg-gray-50 border-b border-r border-gray-100 text-center">
-              <div className="text-[11px] font-semibold text-gray-500 leading-tight">💼 Другие<br />системы</div>
+              <div className="text-[11px] font-semibold text-gray-500 leading-tight whitespace-pre-line">{ct.otherCol}</div>
             </div>
             <div className="px-3 py-4 bg-gradient-to-b from-violet-600 to-violet-700 border-b border-violet-500 text-center">
               <div className="flex items-center justify-center gap-1">
@@ -656,7 +941,7 @@ const ComparisonTable = () => {
           </div>
 
           {/* Data rows */}
-          {COMP_ROWS.map((row, i) => (
+          {ct.rows.map((row, i) => (
             <div
               key={i}
               className="grid border-b border-gray-50 last:border-0 hover:bg-violet-50/20 transition-colors duration-150"
@@ -685,9 +970,9 @@ const ComparisonTable = () => {
 
         {/* Legend */}
         <div className="flex flex-wrap justify-center gap-x-6 gap-y-1.5 mt-5 text-[11px] text-gray-400">
-          <span className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-green-500" />Поддерживается</span>
-          <span className="flex items-center gap-1.5"><XCircle className="w-3 h-3 text-red-400" />Не поддерживается</span>
-          <span className="flex items-center gap-1.5"><span className="text-amber-500 font-bold text-xs">~</span> Частично</span>
+          <span className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-green-500" />{ct.legendYes}</span>
+          <span className="flex items-center gap-1.5"><XCircle className="w-3 h-3 text-red-400" />{ct.legendNo}</span>
+          <span className="flex items-center gap-1.5"><span className="text-amber-500 font-bold text-xs">~</span> {ct.legendPartial}</span>
         </div>
       </div>
     </section>
@@ -695,72 +980,27 @@ const ComparisonTable = () => {
 };
 
 // ─── INDUSTRY TABS ─────────────────────────────────────────────────────────────
-const INDUSTRIES = [
-  {
-    id: 'security', icon: '🛡️', label: 'Охрана',
-    headline: 'Объект не охраняется — вы знаете первым',
-    sub: 'Охранники на нескольких объектах — опоздание любого из них риск для клиента и вашей репутации. GeoTime сообщает об этом через секунду, не через час.',
-    metrics: [{ v: '< 1 с', l: 'Задержка алерта' }, { v: '100%', l: 'GPS-контроль' }, { v: '−30%', l: 'Приписок' }],
-    points: [
-      'Объект не охраняется — мгновенный Telegram-алерт',
-      'Охранник вышел из зоны — директор видит сразу',
-      'История смен с координатами для отчёта клиенту',
-    ],
-  },
-  {
-    id: 'construction', icon: '🏗️', label: 'Строительство',
-    headline: 'Пять объектов — один экран контроля',
-    sub: 'Бригады на разных стройках, субподрядчики, ранние смены. GeoTime заменяет прораба-наблюдателя и устраняет споры по зарплате раз и навсегда.',
-    metrics: [{ v: '5+', l: 'Объектов сразу' }, { v: '1 клик', l: 'Отчёт бригады' }, { v: '−2 ч', l: 'На учёт в день' }],
-    points: [
-      'Прораб видит все бригады на разных стройках',
-      'Нет споров — часы считаются автоматически',
-      'CSV-ведомость для расчёта зарплаты за минуту',
-    ],
-  },
-  {
-    id: 'cleaning', icon: '🧹', label: 'Клининг',
-    headline: 'Уборщица не пришла — клиент не позвонит',
-    sub: 'Клиент звонит когда объект не убран. С GeoTime вы узнаёте об отсутствии через секунды — до того, как клиент заметил.',
-    metrics: [{ v: '<1 мин', l: 'До алерта вам' }, { v: '20+', l: 'Объектов' }, { v: '0', l: 'Необъяснённых смен' }],
-    points: [
-      'Уборщица не на месте — вы уже знаете',
-      'История смен по каждому клиентскому объекту',
-      'Прозрачный учёт для почасовых сотрудников',
-    ],
-  },
-  {
-    id: 'courier', icon: '🚚', label: 'Курьеры',
-    headline: 'Смена — только с нужной точки, не из дома',
-    sub: 'Курьеры не могут начать смену из дома и приписать лишние часы. Работает в браузере любого смартфона без отдельного приложения.',
-    metrics: [{ v: '10 мин', l: 'Старт с нуля' }, { v: 'Любой', l: 'Смартфон' }, { v: '+20%', l: 'Пунктуальность' }],
-    points: [
-      'Смена только с GPS-координат точки старта',
-      'Работает в браузере — не нужен отдельный трекер',
-      'Директор видит кто выехал, кто ещё нет',
-    ],
-  },
-];
-
-const IndustriesTabs = () => {
+const IndustriesTabs = ({ lang }: { lang: Lang }) => {
+  const industries = IND_T[lang];
+  const sc = SHOWCASE_T[lang].ind;
   const [active, setActive] = useState(0);
   const [animKey, setAnimKey] = useState(0);
-  const ind = INDUSTRIES[active];
+  const ind = industries[active];
   const handleTab = (i: number) => { if (i === active) return; setActive(i); setAnimKey(k => k + 1); };
   return (
     <section className="py-20 sm:py-24 px-4 bg-white">
       <div className="max-w-5xl mx-auto">
         <RevealDiv className="text-center mb-10 space-y-3">
           <div className="inline-flex items-center gap-2 bg-gray-50 border border-gray-200 text-gray-600 px-3.5 py-1.5 rounded-full text-xs font-semibold">
-            🏢 По отраслям
+            {sc.badge}
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Для вашей сферы бизнеса</h2>
-          <p className="text-gray-500 text-sm sm:text-base">GeoTime — для любого бизнеса с выездными сотрудниками</p>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">{sc.title}</h2>
+          <p className="text-gray-500 text-sm sm:text-base">{sc.sub}</p>
         </RevealDiv>
 
         {/* Tabs */}
         <div className="flex gap-2 justify-center flex-wrap mb-8">
-          {INDUSTRIES.map((industry, i) => (
+          {industries.map((industry, i) => (
             <button
               key={industry.id}
               onClick={() => handleTab(i)}
@@ -820,34 +1060,8 @@ const IndustriesTabs = () => {
 };
 
 // ─── TESTIMONIALS CAROUSEL ────────────────────────────────────────────────────
-const ALL_TESTIMONIALS = [
-  {
-    text: '"Раньше бригадиры записывали время в тетрадь — постоянные споры по зарплате. Теперь всё прозрачно: кто пришёл, во сколько, сколько отработал. Экономим минимум 2 часа в день на учёте."',
-    name: 'Руслан А.', role: 'Охранное предприятие', city: 'Ташкент',
-    metric: '−2 ч/день', metricLabel: 'на ручной учёт', init: 'РА',
-    grad: 'from-violet-500 to-indigo-500',
-  },
-  {
-    text: '"У нас 5 строительных объектов по городу. Раньше звонили каждому прорабу чтобы узнать кто пришёл. Сейчас открываю GeoTime — вижу всё сразу. Внедрили за день без IT-специалиста."',
-    name: 'Санжар Т.', role: 'Строительная компания', city: 'Ташкент',
-    metric: '5 объектов', metricLabel: 'под контролем', init: 'СТ',
-    grad: 'from-orange-400 to-amber-500',
-  },
-  {
-    text: '"Клининговый бизнес — это десятки объектов и почасовые сотрудники. GeoTime решил проблему приписок и споров. Теперь у меня чёткие данные для расчёта зарплаты каждому сотруднику."',
-    name: 'Нилуфар К.', role: 'Клининговый сервис', city: 'Самарканд',
-    metric: '30+ объектов', metricLabel: 'под контролем', init: 'НК',
-    grad: 'from-pink-500 to-rose-500',
-  },
-  {
-    text: '"Курьеры начали работать честнее. Они знают что смена фиксирует GPS — нет больше «я уже выехал» когда он ещё дома. Внедрение заняло 10 минут. Платим только за реальные часы."',
-    name: 'Баходир У.', role: 'Служба доставки', city: 'Ташкент',
-    metric: '+20%', metricLabel: 'пунктуальность', init: 'БУ',
-    grad: 'from-green-500 to-emerald-500',
-  },
-];
-
-const TestimonialsCarousel = () => {
+const TestimonialsCarousel = ({ lang }: { lang: Lang }) => {
+  const testimonials = TEST_T[lang];
   const [active, setActive] = useState(0);
   const [animIn, setAnimIn] = useState(true);
   const activeRef = useRef(0);
@@ -865,13 +1079,13 @@ const TestimonialsCarousel = () => {
   useEffect(() => {
     if (!sectionVisible) return;
     const id = setInterval(() => {
-      const next = (activeRef.current + 1) % ALL_TESTIMONIALS.length;
+      const next = (activeRef.current + 1) % testimonials.length;
       goTo(next);
     }, 5500);
     return () => clearInterval(id);
-  }, [sectionVisible]);
+  }, [sectionVisible, testimonials.length]);
 
-  const tc = ALL_TESTIMONIALS[active];
+  const tc = testimonials[active];
 
   return (
     <div ref={sectionRef} className="max-w-3xl mx-auto">
@@ -913,7 +1127,7 @@ const TestimonialsCarousel = () => {
 
       {/* Dot navigation */}
       <div className="flex justify-center items-center gap-2.5 mt-6">
-        {ALL_TESTIMONIALS.map((_, i) => (
+        {testimonials.map((_, i) => (
           <button
             key={i}
             onClick={() => goTo(i)}
@@ -928,7 +1142,9 @@ const TestimonialsCarousel = () => {
 };
 
 // ─── GPS MAP MOCKUP ───────────────────────────────────────────────────────────
-const GpsMapMockup = () => (
+const GpsMapMockup = ({ lang }: { lang: Lang }) => {
+  const gm = GPS_MOCK_T[lang];
+  return (
   <div
     className="relative rounded-3xl overflow-hidden"
     style={{ background: '#0b1120', minHeight: 300, boxShadow: '0 28px 64px -16px rgba(99,102,241,0.45), 0 8px 32px -8px rgba(0,0,0,0.55)' }}
@@ -957,7 +1173,7 @@ const GpsMapMockup = () => (
     <div className="absolute" style={{ left: '21%', top: '13%' }}>
       <div className="inline-flex items-center gap-1.5 bg-violet-900/75 border border-violet-500/45 text-violet-300 text-[10px] rounded-full px-2.5 py-1 backdrop-blur-sm font-medium">
         <div className="w-1.5 h-1.5 rounded-full bg-violet-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
-        Объект №1 · Чиланзар
+        {gm.zone}
       </div>
     </div>
     {/* Worker AK — inside zone, on time */}
@@ -965,7 +1181,7 @@ const GpsMapMockup = () => (
       <div className="absolute w-14 h-14 rounded-full bg-green-500/20" style={{ animation: 'geotime-pulse 2.6s ease-in-out infinite', top: -11, left: -11 }} />
       <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 border-2 border-green-300 flex items-center justify-center text-white text-[10px] font-bold shadow-lg z-10">АК</div>
       <div className="absolute z-20 whitespace-nowrap" style={{ bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6 }}>
-        <div className="bg-slate-900/95 border border-green-500/50 text-green-400 text-[9px] rounded-lg px-2 py-1 flex items-center gap-1 shadow-xl">✓ 08:02 вовремя</div>
+        <div className="bg-slate-900/95 border border-green-500/50 text-green-400 text-[9px] rounded-lg px-2 py-1 flex items-center gap-1 shadow-xl">{gm.ak}</div>
       </div>
     </div>
     {/* Worker SM — inside zone, on time */}
@@ -977,14 +1193,14 @@ const GpsMapMockup = () => (
     <div className="absolute" style={{ left: '79%', top: '27%', transform: 'translate(-50%,-50%)' }}>
       <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-red-600 border-2 border-red-300 flex items-center justify-center text-white text-[10px] font-bold shadow-lg" style={{ animation: 'geotime-pulse 1.3s ease-in-out infinite' }}>БЮ</div>
       <div className="absolute z-20 whitespace-nowrap" style={{ bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6 }}>
-        <div className="bg-red-600/95 text-white text-[9px] rounded-lg px-2 py-1 shadow-xl">⚠ Опоздание +23 мин</div>
+        <div className="bg-red-600/95 text-white text-[9px] rounded-lg px-2 py-1 shadow-xl">{gm.by}</div>
       </div>
     </div>
     {/* Top bar */}
     <div className="absolute top-0 inset-x-0 bg-gradient-to-b from-[#0b1120] via-[#0b1120]/80 to-transparent py-3 px-4 flex items-center justify-between">
       <div className="flex items-center gap-1.5">
         <div className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
-        <span className="text-slate-300 text-xs font-medium">Live · 3 сотрудника</span>
+        <span className="text-slate-300 text-xs font-medium">{gm.live}</span>
       </div>
       <span className="text-slate-500 text-xs font-mono">08:35</span>
     </div>
@@ -992,22 +1208,19 @@ const GpsMapMockup = () => (
     <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b1120] via-[#0b1120]/80 to-transparent py-3 px-4">
       <div className="flex items-center gap-2">
         <span className="inline-flex items-center gap-1 bg-green-500/20 text-green-300 border border-green-500/30 text-[10px] rounded-full px-2.5 py-0.5">
-          <div className="w-1 h-1 rounded-full bg-green-400" />2 в зоне
+          <div className="w-1 h-1 rounded-full bg-green-400" />{gm.inZone}
         </span>
-        <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] rounded-full px-2.5 py-0.5">⚠ 1 опоздал</span>
-        <span className="ml-auto text-slate-600 text-[10px]">Ташкент, Чиланзар</span>
+        <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] rounded-full px-2.5 py-0.5">⚠ {gm.late1}</span>
+        <span className="ml-auto text-slate-600 text-[10px]">{gm.city}</span>
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ─── TELEGRAM CHAT MOCKUP ────────────────────────────────────────────────────
-const TELE_MSGS = [
-  { text: '✅ Алишер К. начал смену\n📍 Объект №1 · Чиланзар\n🕐 08:02 — вовремя', time: '08:02' },
-  { text: '⚠️ Бахром Ю. опоздал на 23 мин\n📍 Объект №2 · Юнусабад\n🕐 Должен быть в 08:00', time: '08:31' },
-];
-
-const TelegramChatMockup = () => {
+const TelegramChatMockup = ({ lang }: { lang: Lang }) => {
+  const tm = TELE_MOCK_T[lang];
   const [phase, setPhase] = useState<0 | 1 | 2>(0);
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 2000);
@@ -1022,12 +1235,12 @@ const TelegramChatMockup = () => {
         </div>
         <div className="flex-1">
           <div className="text-white text-sm font-semibold">GeoTime Bot</div>
-          <div className="text-white/70 text-[11px]">всегда онлайн</div>
+          <div className="text-white/70 text-[11px]">{tm.online}</div>
         </div>
         <div className="w-2 h-2 rounded-full bg-green-400" style={{ animation: 'geotime-pulse 2s ease-in-out infinite' }} />
       </div>
       <div className="p-3 space-y-2.5" style={{ minHeight: 210 }}>
-        {TELE_MSGS.map((msg, i) => (
+        {tm.msgs.map((msg, i) => (
           <div key={i} className="flex gap-2 items-end">
             <div className="w-6 h-6 rounded-full bg-[#2AABEE]/25 flex items-center justify-center shrink-0">
               <div className="w-3 h-3 rounded-full bg-[#2AABEE]" />
@@ -1056,7 +1269,7 @@ const TelegramChatMockup = () => {
               <div className="w-3 h-3 rounded-full bg-[#2AABEE]" />
             </div>
             <div className="bg-white rounded-2xl rounded-bl-none p-2.5 shadow-sm max-w-[85%]">
-              <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans text-gray-700">{'📊 Дневной отчёт готов\n22 смены · 1 опоздание\nСкачать CSV ⬇️'}</pre>
+              <pre className="text-[11px] leading-relaxed whitespace-pre-wrap font-sans text-gray-700">{tm.report}</pre>
               <div className="text-[9px] text-gray-400 text-right mt-0.5">18:00 ✓</div>
             </div>
           </div>
@@ -1068,13 +1281,14 @@ const TelegramChatMockup = () => {
 
 // ─── REPORTS TABLE MOCKUP ─────────────────────────────────────────────────────
 const REPORT_ROWS = [
-  { init: 'АК', first: 'Алишер', days: 22, hours: '176ч', lates: 0 },
-  { init: 'БЮ', first: 'Бахром',  days: 20, hours: '162ч', lates: 3 },
-  { init: 'СМ', first: 'Санжар',  days: 22, hours: '178ч', lates: 0 },
-  { init: 'ДА', first: 'Дилшод',  days: 21, hours: '169ч', lates: 1 },
+  { init: 'АК', first: 'Алишер', days: 22, hours: '176', lates: 0 },
+  { init: 'БЮ', first: 'Бахром',  days: 20, hours: '162', lates: 3 },
+  { init: 'СМ', first: 'Санжар',  days: 22, hours: '178', lates: 0 },
+  { init: 'ДА', first: 'Дилшод',  days: 21, hours: '169', lates: 1 },
 ];
 
-const ReportsMockup = () => {
+const ReportsMockup = ({ lang }: { lang: Lang }) => {
+  const rm = REPORT_MOCK_T[lang];
   const [csvState, setCsvState] = useState<'idle' | 'loading' | 'done'>('idle');
   const handleCsv = () => {
     if (csvState !== 'idle') return;
@@ -1086,8 +1300,8 @@ const ReportsMockup = () => {
     <div className="rounded-3xl overflow-hidden border border-gray-100 bg-white" style={{ boxShadow: '0 25px 60px -15px rgba(124,58,237,0.18), 0 8px 30px -8px rgba(0,0,0,0.08)' }}>
       <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 flex items-center justify-between">
         <div>
-          <div className="text-white text-sm font-semibold">Отчёт · Февраль 2025</div>
-          <div className="text-violet-200 text-[11px] mt-0.5">4 сотрудника · Объект №1</div>
+          <div className="text-white text-sm font-semibold">{rm.title}</div>
+          <div className="text-violet-200 text-[11px] mt-0.5">{rm.sub}</div>
         </div>
         <button
           className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl transition-all duration-300 ${csvState === 'done' ? 'bg-green-500 text-white shadow-lg shadow-green-500/40' : csvState === 'loading' ? 'bg-white/20 text-violet-200 cursor-wait' : 'bg-white text-violet-700 hover:bg-violet-50 shadow-md'}`}
@@ -1097,7 +1311,7 @@ const ReportsMockup = () => {
         </button>
       </div>
       <div className="grid bg-gray-50 border-b border-gray-100 px-5 py-2 text-[10px] text-gray-400 font-semibold uppercase tracking-widest" style={{ gridTemplateColumns: '1fr 44px 54px 78px' }}>
-        <span>Сотрудник</span><span className="text-center">Дней</span><span className="text-center">Часы</span><span className="text-center">Статус</span>
+        <span>{rm.colWorker}</span><span className="text-center">{rm.colDays}</span><span className="text-center">{rm.colHours}</span><span className="text-center">{rm.colStatus}</span>
       </div>
       <div className="divide-y divide-gray-50">
         {REPORT_ROWS.map((row, i) => (
@@ -1110,16 +1324,16 @@ const ReportsMockup = () => {
             <span className="text-center text-xs font-semibold text-gray-800 tabular-nums">{row.hours}</span>
             <div className="flex justify-center">
               {row.lates === 0
-                ? <span className="bg-green-100 text-green-700 text-[9px] rounded-full px-2 py-0.5 font-semibold">✓ Отлично</span>
-                : <span className="bg-amber-100 text-amber-700 text-[9px] rounded-full px-2 py-0.5 font-semibold">{row.lates}× поздно</span>
+                ? <span className="bg-green-100 text-green-700 text-[9px] rounded-full px-2 py-0.5 font-semibold">{rm.good}</span>
+                : <span className="bg-amber-100 text-amber-700 text-[9px] rounded-full px-2 py-0.5 font-semibold">{rm.late(row.lates)}</span>
               }
             </div>
           </div>
         ))}
       </div>
       <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-        <span className="text-[10px] text-gray-400">Итого: 685 ч · Среднее: 171 ч</span>
-        <span className="text-[10px] text-violet-500 font-medium">Скачать PDF →</span>
+        <span className="text-[10px] text-gray-400">{rm.footer}</span>
+        <span className="text-[10px] text-violet-500 font-medium">{rm.pdf}</span>
       </div>
     </div>
   );
@@ -1228,7 +1442,7 @@ const Welcome = () => {
 
             {/* Right: App Mockup */}
             <div className="flex-1 w-full max-w-sm lg:max-w-none pt-8 lg:pt-0">
-              <AppMockup />
+              <AppMockup lang={lang} />
             </div>
 
           </div>
@@ -1236,7 +1450,7 @@ const Welcome = () => {
       </section>
 
       {/* MARQUEE */}
-      <NotifMarquee />
+      <NotifMarquee lang={lang} />
 
       {/* PAIN */}
       <section className="py-16 px-4 bg-gray-50">
@@ -1268,7 +1482,7 @@ const Welcome = () => {
       </section>
 
       {/* COMPARISON */}
-      <ComparisonTable />
+      <ComparisonTable lang={lang} />
 
       {/* HOW IT WORKS */}
       <section className="py-16 px-4">
@@ -1303,7 +1517,7 @@ const Welcome = () => {
       </section>
 
       {/* CALCULATOR */}
-      <Calculator />
+      <Calculator lang={lang} />
 
       {/* SHOWCASE: GPS MAP */}
       <section className="py-20 sm:py-28 px-4 bg-white overflow-hidden">
@@ -1312,33 +1526,27 @@ const Welcome = () => {
             {/* Text */}
             <RevealDiv direction="left" className="flex-1 space-y-6 lg:max-w-[480px]">
               <div className="inline-flex items-center gap-2 bg-violet-50 border border-violet-200 text-violet-700 px-3.5 py-1.5 rounded-full text-xs font-semibold">
-                <MapPin className="w-3.5 h-3.5" /> Геолокация в реальном времени
+                <MapPin className="w-3.5 h-3.5" /> {SHOWCASE_T[lang].gps.badge}
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900">
-                Видите каждого сотрудника<br />
-                <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">прямо на карте</span>
+                {SHOWCASE_T[lang].gps.h1}<br />
+                <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">{SHOWCASE_T[lang].gps.h2}</span>
               </h2>
-              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">
-                Начало смены фиксируется только при нахождении в радиусе объекта. Подтасовать данные невозможно — GPS-координаты проверяются автоматически в браузере телефона.
-              </p>
+              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">{SHOWCASE_T[lang].gps.p}</p>
               <ul className="space-y-3">
-                {[
-                  'Геофенс-зоны с настраиваемым радиусом для каждого объекта',
-                  'PIN-коды вместо паролей — работает с первой попытки',
-                  'История каждой смены с точными временными метками',
-                ].map(text => (
+                {SHOWCASE_T[lang].gps.bullets.map(text => (
                   <li key={text} className="flex items-start gap-3 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />{text}
                   </li>
                 ))}
               </ul>
               <Button size="lg" className="h-11 px-6 text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 shadow-lg shadow-violet-200" onClick={() => navigate('/register')}>
-                Попробовать бесплатно <ArrowRight className="w-4 h-4 ml-2" />
+                {SHOWCASE_T[lang].gps.btn} <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </RevealDiv>
             {/* Map Visual */}
             <RevealDiv direction="right" className="flex-1 w-full max-w-md lg:max-w-xl">
-              <GpsMapMockup />
+              <GpsMapMockup lang={lang} />
             </RevealDiv>
           </div>
         </div>
@@ -1351,21 +1559,15 @@ const Welcome = () => {
             {/* Text */}
             <RevealDiv direction="right" className="flex-1 space-y-6 lg:max-w-[480px]">
               <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 px-3.5 py-1.5 rounded-full text-xs font-semibold">
-                <Send className="w-3.5 h-3.5" /> Telegram-уведомления
+                <Send className="w-3.5 h-3.5" /> {SHOWCASE_T[lang].telegram.badge}
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900">
-                Узнаёте об опоздании<br />
-                <span className="bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">раньше клиента</span>
+                {SHOWCASE_T[lang].telegram.h1}<br />
+                <span className="bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">{SHOWCASE_T[lang].telegram.h2}</span>
               </h2>
-              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">
-                Никаких новых приложений. Алерты приходят прямо в Telegram — мессенджер, которым вы уже пользуетесь каждый день. Настройка за 2 минуты.
-              </p>
+              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">{SHOWCASE_T[lang].telegram.p}</p>
               <ul className="space-y-3">
-                {[
-                  'Мгновенный алерт при опоздании сотрудника',
-                  'Уведомление когда сотрудник покидает зону объекта',
-                  'Дневной и недельный сводный отчёт прямо в чат',
-                ].map(text => (
+                {SHOWCASE_T[lang].telegram.bullets.map(text => (
                   <li key={text} className="flex items-start gap-3 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />{text}
                   </li>
@@ -1374,7 +1576,7 @@ const Welcome = () => {
             </RevealDiv>
             {/* Telegram Chat Visual */}
             <RevealDiv direction="left" className="flex-1 flex justify-center lg:justify-start">
-              <TelegramChatMockup />
+              <TelegramChatMockup lang={lang} />
             </RevealDiv>
           </div>
         </div>
@@ -1387,33 +1589,27 @@ const Welcome = () => {
             {/* Text */}
             <RevealDiv direction="left" className="flex-1 space-y-6 lg:max-w-[480px]">
               <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-3.5 py-1.5 rounded-full text-xs font-semibold">
-                <FileBarChart className="w-3.5 h-3.5" /> Умные отчёты
+                <FileBarChart className="w-3.5 h-3.5" /> {SHOWCASE_T[lang].reports.badge}
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight text-gray-900">
-                Зарплатная ведомость<br />
-                <span className="bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">одним кликом</span>
+                {SHOWCASE_T[lang].reports.h1}<br />
+                <span className="bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">{SHOWCASE_T[lang].reports.h2}</span>
               </h2>
-              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">
-                Забудьте про Excel-таблицы и споры о часах. GeoTime автоматически считает рабочее время каждого сотрудника и формирует CSV-файл для зарплатной ведомости.
-              </p>
+              <p className="text-gray-500 text-sm sm:text-base leading-relaxed">{SHOWCASE_T[lang].reports.p}</p>
               <ul className="space-y-3">
-                {[
-                  'Фильтр по дням, неделям и месяцам',
-                  'Экспорт CSV — вставьте в Excel и готово',
-                  'Видите кто систематически нарушает режим',
-                ].map(text => (
+                {SHOWCASE_T[lang].reports.bullets.map(text => (
                   <li key={text} className="flex items-start gap-3 text-sm text-gray-600">
                     <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />{text}
                   </li>
                 ))}
               </ul>
               <Button size="lg" className="h-11 px-6 text-sm font-semibold bg-gradient-to-r from-green-500 to-emerald-600 hover:opacity-90 shadow-lg shadow-green-200" onClick={() => navigate('/register')}>
-                Начать бесплатно <ArrowRight className="w-4 h-4 ml-2" />
+                {SHOWCASE_T[lang].reports.btn} <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </RevealDiv>
             {/* Reports Table Visual */}
             <RevealDiv direction="right" className="flex-1 w-full max-w-md lg:max-w-xl">
-              <ReportsMockup />
+              <ReportsMockup lang={lang} />
             </RevealDiv>
           </div>
         </div>
@@ -1460,13 +1656,13 @@ const Welcome = () => {
       </section>
 
       {/* INDUSTRIES */}
-      <IndustriesTabs />
+      <IndustriesTabs lang={lang} />
 
       {/* STATS + TESTIMONIAL */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto space-y-8">
           <StatsRow stats={t.stats} />
-          <TestimonialsCarousel />
+          <TestimonialsCarousel lang={lang} />
         </div>
       </section>
 
