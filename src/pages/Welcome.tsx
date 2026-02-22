@@ -69,18 +69,20 @@ const TRANSLATIONS = {
       role: 'Охранное предприятие, Ташкент',
     },
     pricing: {
-      title: 'Прозрачные цены',
-      sub: 'Оплата через Payme или банковский перевод · Пробный период бесплатно',
-      popular: 'Популярный',
+      title: 'Простые цены',
+      sub: 'Платите только за реальных сотрудников · Оплата через Payme',
+      popular: 'Для бизнеса',
       cta: 'Начать бесплатно',
+      ctaPaid: 'Подключить',
       ask: 'Задать вопрос',
       note: 'Принимаем Payme и банковский перевод (счёт-фактура)',
       askMsg: (name: string) => `Здравствуйте! Хочу узнать подробнее о тарифе "${name}"`,
+      examples: '10 чел → 100 000 сум · 30 чел → 300 000 сум · 50 чел → 500 000 сум',
+      perWorker: 'сум × кол-во сотрудников / мес',
     },
     plans: [
-      { name: 'Старт', price: '99 000', features: ['До 10 сотрудников', 'До 3 объектов', 'Отчёты и CSV', 'Геолокация'] },
-      { name: 'Бизнес', price: '249 000', popular: true, features: ['До 50 сотрудников', 'До 20 объектов', 'Telegram уведомления', 'Приоритетная поддержка'] },
-      { name: 'Корпоративный', price: '599 000', features: ['До 200 сотрудников', 'Объекты без лимита', 'API доступ', 'Выделенный менеджер'] },
+      { name: 'Бесплатно', price: '0', forever: true, features: ['До 5 сотрудников', '1 объект', 'Геолокация и смены', 'Отчёты и CSV', 'Навсегда бесплатно'] },
+      { name: 'Бизнес', price: '10 000', popular: true, features: ['Неограниченно сотрудников', 'Неограниченно объектов', 'Telegram уведомления', 'Отчёты и CSV экспорт', 'Поддержка в Telegram'] },
     ],
     faq: {
       title: 'Частые вопросы',
@@ -88,8 +90,8 @@ const TRANSLATIONS = {
         { q: 'Нужно ли устанавливать приложение?', a: 'Нет. GeoTime работает прямо в браузере телефона — сотрудник открывает ссылку и готово. Никаких установок из App Store или Google Play.' },
         { q: 'Что если сотрудник выключит геолокацию?', a: 'Без геолокации нельзя начать смену — система выдаст ошибку. Обмануть не получится: смена привязана к GPS-координатам объекта с радиусом, который вы сами задаёте.' },
         { q: 'Как оплачивать? Принимаете Payme?', a: 'Оплата через Payme или банковский перевод (счёт-фактура). Напишите нам в Telegram и мы выставим счёт в течение рабочего дня.' },
-        { q: 'Можно попробовать бесплатно?', a: 'Да! После регистрации вы получаете пробный период без ограничений по функционалу. Карта и реквизиты не нужны.' },
-        { q: 'Сколько объектов можно добавить?', a: 'На тарифе Старт — до 3 объектов, на Бизнесе — до 20, на Корпоративном — без ограничений.' },
+        { q: 'Можно попробовать бесплатно?', a: 'Да! До 5 сотрудников — навсегда бесплатно. Без карты и реквизитов.' },
+        { q: 'Как считается стоимость?', a: '10 000 сум умножить на количество сотрудников в месяц. 20 человек = 200 000 сум, 50 человек = 500 000 сум. Чем больше команда — тем выгоднее на одного человека.' },
       ],
     },
     cta: {
@@ -162,18 +164,20 @@ const TRANSLATIONS = {
       role: 'Qo\'riqlash korxonasi, Toshkent',
     },
     pricing: {
-      title: 'Shaffof narxlar',
-      sub: 'Payme orqali to\'lov yoki bank o\'tkazmasi · Sinov muddati bepul',
-      popular: 'Mashhur',
+      title: 'Oddiy narxlar',
+      sub: 'Faqat haqiqiy xodimlar uchun to\'lang · Payme orqali to\'lov',
+      popular: 'Biznes uchun',
       cta: 'Bepul boshlash',
+      ctaPaid: 'Ulash',
       ask: 'Savol berish',
       note: 'Payme va bank o\'tkazmasi (hisob-faktura) qabul qilinadi',
       askMsg: (name: string) => `Salom! "${name}" tarifi haqida ko'proq bilishni istayman`,
+      examples: '10 kishi → 100 000 so\'m · 30 kishi → 300 000 so\'m · 50 kishi → 500 000 so\'m',
+      perWorker: 'so\'m × xodimlar soni / oy',
     },
     plans: [
-      { name: 'Start', price: '99 000', features: ['10 tagacha xodim', '3 tagacha ob\'ekt', 'Hisobotlar va CSV', 'Geolokatsiya'] },
-      { name: 'Biznes', price: '249 000', popular: true, features: ['50 tagacha xodim', '20 tagacha ob\'ekt', 'Telegram xabarnomalar', 'Ustuvor qo\'llab-quvvatlash'] },
-      { name: 'Korporativ', price: '599 000', features: ['200 tagacha xodim', 'Ob\'ektlar cheksiz', 'API kirish', 'Shaxsiy menejer'] },
+      { name: 'Bepul', price: '0', forever: true, features: ['5 tagacha xodim', '1 ob\'ekt', 'Geolokatsiya va smenalar', 'Hisobotlar va CSV', 'Doimo bepul'] },
+      { name: 'Biznes', price: '10 000', popular: true, features: ['Cheksiz xodimlar', 'Cheksiz ob\'ektlar', 'Telegram xabarnomalar', 'Hisobotlar va CSV eksport', 'Telegramda qo\'llab-quvvatlash'] },
     ],
     faq: {
       title: 'Ko\'p so\'raladigan savollar',
@@ -181,8 +185,8 @@ const TRANSLATIONS = {
         { q: 'Ilova o\'rnatish kerakmi?', a: 'Yo\'q. GeoTime to\'g\'ridan-to\'g\'ri telefon brauzerida ishlaydi — xodim havolani ochadi va tayyor. App Store yoki Google Play dan hech qanday o\'rnatish yo\'q.' },
         { q: 'Xodim geolokatsiyani o\'chirsa nima bo\'ladi?', a: 'Geolokatsiyasiz smena boshlash mumkin emas — tizim xato beradi. Aldab bo\'lmaydi: smena siz belgilagan radiusga ega ob\'ekt GPS koordinatalariga bog\'langan.' },
         { q: 'Qanday to\'lash mumkin? Payme qabul qilasizmi?', a: 'Payme orqali yoki bank o\'tkazmasi (hisob-faktura) orqali to\'lov. Telegramda yozing va biz ish kuni davomida hisob-faktura chiqaramiz.' },
-        { q: 'Bepul sinab ko\'rish mumkinmi?', a: 'Ha! Ro\'yxatdan o\'tgandan keyin siz funksionallik bo\'yicha cheklovlarsiz sinov muddati olasiz. Karta va rekvizitlar kerak emas.' },
-        { q: 'Nechta ob\'ekt qo\'shish mumkin?', a: 'Start tarifida — 3 tagacha ob\'ekt, Biznesda — 20 tagacha, Korporativda — cheklovsiz.' },
+        { q: 'Bepul sinab ko\'rish mumkinmi?', a: 'Ha! 5 tagacha xodim — doimo bepul. Karta va rekvizitlar kerak emas.' },
+        { q: 'Narx qanday hisoblanadi?', a: '10 000 so\'mni xodimlar soniga ko\'paytiring. 20 kishi = 200 000 so\'m, 50 kishi = 500 000 so\'m oyiga.' },
       ],
     },
     cta: {
@@ -205,9 +209,8 @@ type Lang = keyof typeof TRANSLATIONS;
 
 // ─── PLAN ICONS ──────────────────────────────────────────────────────────────
 const PLAN_META = [
-  { icon: Zap,    color: 'from-blue-500 to-cyan-500',    border: 'border-blue-100'   },
-  { icon: Shield, color: 'from-violet-600 to-indigo-600', border: 'border-violet-200' },
-  { icon: Crown,  color: 'from-amber-500 to-orange-500', border: 'border-amber-100'  },
+  { icon: Zap,    color: 'from-gray-400 to-gray-500',    border: 'border-gray-100'   },
+  { icon: Crown,  color: 'from-violet-600 to-indigo-600', border: 'border-violet-200' },
 ];
 
 const FEATURE_META = [
@@ -431,15 +434,16 @@ const Welcome = () => {
 
       {/* PRICING */}
       <section className="py-16 px-4 bg-gray-50" id="pricing">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <div className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">{t.pricing.title}</h2>
             <p className="text-gray-500 text-sm sm:text-base">{t.pricing.sub}</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {t.plans.map((plan, i) => {
               const { icon: Icon, color, border } = PLAN_META[i];
               const popular = 'popular' in plan && plan.popular;
+              const forever = 'forever' in plan && plan.forever;
               return (
                 <div key={i} className={`relative bg-white rounded-3xl border-2 ${popular ? 'border-violet-400 shadow-xl shadow-violet-100' : `${border} shadow-sm`} p-6 flex flex-col gap-5`}>
                   {popular && (
@@ -451,16 +455,28 @@ const Welcome = () => {
                     <Icon className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">{plan.name}</div>
-                    <div className="flex items-baseline gap-1 mt-1">
-                      <span className="text-2xl sm:text-3xl font-extrabold">{plan.price}</span>
-                      <span className="text-gray-400 text-sm">{t.perMonth}</span>
-                    </div>
+                    <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{plan.name}</div>
+                    {popular ? (
+                      <>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-extrabold text-violet-700">{plan.price}</span>
+                          <span className="text-gray-500 text-xs leading-tight">{t.pricing.perWorker}</span>
+                        </div>
+                        <div className="mt-2 text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-1.5 leading-relaxed">
+                          {t.pricing.examples}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-extrabold">{plan.price}</span>
+                        <span className="text-gray-400 text-sm">{t.perMonth}</span>
+                      </div>
+                    )}
                   </div>
                   <ul className="space-y-2 flex-1">
                     {plan.features.map((f) => (
                       <li key={f} className="flex items-start gap-2 text-xs sm:text-sm text-gray-600">
-                        <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                        <CheckCircle className={`w-4 h-4 shrink-0 mt-0.5 ${popular ? 'text-violet-500' : 'text-green-500'}`} />
                         {f}
                       </li>
                     ))}
@@ -471,22 +487,25 @@ const Welcome = () => {
                       variant={popular ? 'default' : 'outline'}
                       onClick={() => navigate('/register')}
                     >
-                      {t.pricing.cta}
+                      {forever ? t.pricing.cta : t.pricing.ctaPaid}
                     </Button>
-                    <button
-                      className="w-full text-xs text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 py-1 transition-colors"
-                      onClick={() => {
-                        const text = encodeURIComponent(t.pricing.askMsg(plan.name));
-                        window.open(`${CONTACT_TELEGRAM}?text=${text}`, '_blank');
-                      }}
-                    >
-                      <MessageCircle className="w-3 h-3" />{t.pricing.ask}
-                    </button>
+                    {popular && (
+                      <button
+                        className="w-full text-xs text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 py-1 transition-colors"
+                        onClick={() => {
+                          const text = encodeURIComponent(t.pricing.askMsg(plan.name));
+                          window.open(`${CONTACT_TELEGRAM}?text=${text}`, '_blank');
+                        }}
+                      >
+                        <MessageCircle className="w-3 h-3" />{t.pricing.ask}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
+          <p className="text-center text-xs text-gray-400 mt-5">{t.pricing.note}</p>
         </div>
       </section>
 
