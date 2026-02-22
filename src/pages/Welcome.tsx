@@ -577,6 +577,354 @@ const AppMockup = () => {
   );
 };
 
+// ─── COMPARISON TABLE ─────────────────────────────────────────────────────────
+type CellVal = boolean | 'partial' | string;
+
+const COMP_ROWS: { feature: string; excel: CellVal; other: CellVal; geo: CellVal }[] = [
+  { feature: 'Геолокация при старте смены',         excel: false,            other: 'partial',       geo: true           },
+  { feature: 'Нельзя подделать время прихода',       excel: false,            other: 'partial',       geo: true           },
+  { feature: 'Telegram-алерты об опоздании',         excel: false,            other: 'partial',       geo: true           },
+  { feature: 'Без установки приложения',              excel: false,            other: false,           geo: true           },
+  { feature: 'Запуск без IT-специалиста',             excel: true,             other: false,           geo: true           },
+  { feature: 'Экспорт CSV для зарплаты',              excel: false,            other: true,            geo: true           },
+  { feature: 'Время внедрения',                       excel: '∞ ручной труд',  other: '1–3 месяца',    geo: '10 минут ⚡'   },
+  { feature: 'Цена · 20 сотрудников / мес',           excel: 'Скрытые потери', other: '250 000+ сум',  geo: '200 000 сум ✅'},
+];
+
+const CompCell = ({ val, isGeo = false }: { val: CellVal; isGeo?: boolean }) => {
+  if (val === true) return (
+    <div className="flex justify-center">
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isGeo ? 'bg-violet-100' : 'bg-green-100'}`}>
+        <CheckCircle className={`w-3.5 h-3.5 ${isGeo ? 'text-violet-600' : 'text-green-600'}`} />
+      </div>
+    </div>
+  );
+  if (val === false) return (
+    <div className="flex justify-center">
+      <div className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center">
+        <XCircle className="w-3.5 h-3.5 text-red-400" />
+      </div>
+    </div>
+  );
+  if (val === 'partial') return (
+    <div className="flex justify-center">
+      <div className="w-6 h-6 rounded-full bg-amber-50 flex items-center justify-center">
+        <span className="text-amber-500 text-xs font-bold leading-none">~</span>
+      </div>
+    </div>
+  );
+  return <span className={`text-[11px] text-center leading-tight ${isGeo ? 'text-violet-800 font-semibold' : 'text-gray-500'}`}>{val}</span>;
+};
+
+const ComparisonTable = () => {
+  const { ref, visible } = useScrollReveal(0.08);
+  return (
+    <section className="py-20 sm:py-24 px-4 bg-gray-50">
+      <div className="max-w-4xl mx-auto">
+        <RevealDiv className="text-center mb-10 space-y-3">
+          <div className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-sm">
+            ⚖️ Сравнение решений
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
+            GeoTime vs <span className="text-gray-400 font-light">альтернативы</span>
+          </h2>
+          <p className="text-gray-500 text-sm sm:text-base max-w-lg mx-auto">
+            Честное сравнение с Excel и дорогими HR-системами
+          </p>
+        </RevealDiv>
+
+        <div ref={ref} className="rounded-3xl overflow-hidden border border-gray-200 shadow-xl bg-white">
+          {/* Column headers */}
+          <div className="grid" style={{ gridTemplateColumns: '1.6fr 1fr 1fr 1fr' }}>
+            <div className="px-5 py-4 bg-gray-50 border-b border-r border-gray-100">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Возможность</span>
+            </div>
+            <div className="px-3 py-4 bg-gray-50 border-b border-r border-gray-100 text-center">
+              <div className="text-[11px] font-semibold text-gray-500 leading-tight">📋 Excel /<br />Бумага</div>
+            </div>
+            <div className="px-3 py-4 bg-gray-50 border-b border-r border-gray-100 text-center">
+              <div className="text-[11px] font-semibold text-gray-500 leading-tight">💼 Другие<br />системы</div>
+            </div>
+            <div className="px-3 py-4 bg-gradient-to-b from-violet-600 to-violet-700 border-b border-violet-500 text-center">
+              <div className="flex items-center justify-center gap-1">
+                <GeoTimeLogo size={12} />
+                <span className="text-[11px] font-bold text-white">GeoTime</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Data rows */}
+          {COMP_ROWS.map((row, i) => (
+            <div
+              key={i}
+              className="grid border-b border-gray-50 last:border-0 hover:bg-violet-50/20 transition-colors duration-150"
+              style={{
+                gridTemplateColumns: '1.6fr 1fr 1fr 1fr',
+                opacity: visible ? 1 : 0,
+                transform: visible ? 'none' : 'translateX(-16px)',
+                transition: `opacity 0.5s ease ${i * 70}ms, transform 0.5s ease ${i * 70}ms`,
+              }}
+            >
+              <div className="px-5 py-3.5 border-r border-gray-100 flex items-center">
+                <span className="text-xs font-medium text-gray-700 leading-snug">{row.feature}</span>
+              </div>
+              <div className="px-3 py-3.5 border-r border-gray-100 flex items-center justify-center bg-gray-50/40">
+                <CompCell val={row.excel} />
+              </div>
+              <div className="px-3 py-3.5 border-r border-gray-100 flex items-center justify-center bg-gray-50/40">
+                <CompCell val={row.other} />
+              </div>
+              <div className="px-3 py-3.5 flex items-center justify-center bg-violet-50/50">
+                <CompCell val={row.geo} isGeo />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap justify-center gap-x-6 gap-y-1.5 mt-5 text-[11px] text-gray-400">
+          <span className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-green-500" />Поддерживается</span>
+          <span className="flex items-center gap-1.5"><XCircle className="w-3 h-3 text-red-400" />Не поддерживается</span>
+          <span className="flex items-center gap-1.5"><span className="text-amber-500 font-bold text-xs">~</span> Частично</span>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ─── INDUSTRY TABS ─────────────────────────────────────────────────────────────
+const INDUSTRIES = [
+  {
+    id: 'security', icon: '🛡️', label: 'Охрана',
+    headline: 'Объект не охраняется — вы знаете первым',
+    sub: 'Охранники на нескольких объектах — опоздание любого из них риск для клиента и вашей репутации. GeoTime сообщает об этом через секунду, не через час.',
+    metrics: [{ v: '< 1 с', l: 'Задержка алерта' }, { v: '100%', l: 'GPS-контроль' }, { v: '−30%', l: 'Приписок' }],
+    points: [
+      'Объект не охраняется — мгновенный Telegram-алерт',
+      'Охранник вышел из зоны — директор видит сразу',
+      'История смен с координатами для отчёта клиенту',
+    ],
+  },
+  {
+    id: 'construction', icon: '🏗️', label: 'Строительство',
+    headline: 'Пять объектов — один экран контроля',
+    sub: 'Бригады на разных стройках, субподрядчики, ранние смены. GeoTime заменяет прораба-наблюдателя и устраняет споры по зарплате раз и навсегда.',
+    metrics: [{ v: '5+', l: 'Объектов сразу' }, { v: '1 клик', l: 'Отчёт бригады' }, { v: '−2 ч', l: 'На учёт в день' }],
+    points: [
+      'Прораб видит все бригады на разных стройках',
+      'Нет споров — часы считаются автоматически',
+      'CSV-ведомость для расчёта зарплаты за минуту',
+    ],
+  },
+  {
+    id: 'cleaning', icon: '🧹', label: 'Клининг',
+    headline: 'Уборщица не пришла — клиент не позвонит',
+    sub: 'Клиент звонит когда объект не убран. С GeoTime вы узнаёте об отсутствии через секунды — до того, как клиент заметил.',
+    metrics: [{ v: '<1 мин', l: 'До алерта вам' }, { v: '20+', l: 'Объектов' }, { v: '0', l: 'Необъяснённых смен' }],
+    points: [
+      'Уборщица не на месте — вы уже знаете',
+      'История смен по каждому клиентскому объекту',
+      'Прозрачный учёт для почасовых сотрудников',
+    ],
+  },
+  {
+    id: 'courier', icon: '🚚', label: 'Курьеры',
+    headline: 'Смена — только с нужной точки, не из дома',
+    sub: 'Курьеры не могут начать смену из дома и приписать лишние часы. Работает в браузере любого смартфона без отдельного приложения.',
+    metrics: [{ v: '10 мин', l: 'Старт с нуля' }, { v: 'Любой', l: 'Смартфон' }, { v: '+20%', l: 'Пунктуальность' }],
+    points: [
+      'Смена только с GPS-координат точки старта',
+      'Работает в браузере — не нужен отдельный трекер',
+      'Директор видит кто выехал, кто ещё нет',
+    ],
+  },
+];
+
+const IndustriesTabs = () => {
+  const [active, setActive] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
+  const ind = INDUSTRIES[active];
+  const handleTab = (i: number) => { if (i === active) return; setActive(i); setAnimKey(k => k + 1); };
+  return (
+    <section className="py-20 sm:py-24 px-4 bg-white">
+      <div className="max-w-5xl mx-auto">
+        <RevealDiv className="text-center mb-10 space-y-3">
+          <div className="inline-flex items-center gap-2 bg-gray-50 border border-gray-200 text-gray-600 px-3.5 py-1.5 rounded-full text-xs font-semibold">
+            🏢 По отраслям
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Для вашей сферы бизнеса</h2>
+          <p className="text-gray-500 text-sm sm:text-base">GeoTime — для любого бизнеса с выездными сотрудниками</p>
+        </RevealDiv>
+
+        {/* Tabs */}
+        <div className="flex gap-2 justify-center flex-wrap mb-8">
+          {INDUSTRIES.map((industry, i) => (
+            <button
+              key={industry.id}
+              onClick={() => handleTab(i)}
+              className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${
+                active === i
+                  ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-200/60'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+              }`}
+            >
+              <span className="text-base leading-none">{industry.icon}</span>
+              <span>{industry.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div
+          key={animKey}
+          className="relative bg-gradient-to-br from-violet-50/80 to-indigo-50/60 border border-violet-100 rounded-3xl p-7 sm:p-10 overflow-hidden"
+          style={{ animation: 'geotime-num-pop 0.42s cubic-bezier(.4,0,.2,1) forwards' }}
+        >
+          <div className="absolute -right-16 -top-16 w-64 h-64 rounded-full bg-violet-100/60 blur-3xl pointer-events-none" />
+          <div className="absolute -left-8 -bottom-8 w-48 h-48 rounded-full bg-indigo-100/50 blur-2xl pointer-events-none" />
+
+          <div className="relative flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
+            {/* Left */}
+            <div className="flex-1 space-y-5">
+              <div className="text-5xl leading-none">{ind.icon}</div>
+              <h3 className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-tight">{ind.headline}</h3>
+              <p className="text-gray-600 text-sm sm:text-base leading-relaxed">{ind.sub}</p>
+              <ul className="space-y-3 pt-1">
+                {ind.points.map(p => (
+                  <li key={p} className="flex items-start gap-3 text-sm text-gray-700">
+                    <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <CheckCircle className="w-3 h-3 text-violet-600" />
+                    </div>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Metric cards */}
+            <div className="flex flex-row lg:flex-col gap-3 lg:w-44 w-full">
+              {ind.metrics.map(m => (
+                <div key={m.l} className="flex-1 lg:flex-none bg-white rounded-2xl border border-violet-100/80 p-4 text-center shadow-sm">
+                  <div className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent leading-none">{m.v}</div>
+                  <div className="text-[11px] text-gray-500 mt-1 leading-snug">{m.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ─── TESTIMONIALS CAROUSEL ────────────────────────────────────────────────────
+const ALL_TESTIMONIALS = [
+  {
+    text: '"Раньше бригадиры записывали время в тетрадь — постоянные споры по зарплате. Теперь всё прозрачно: кто пришёл, во сколько, сколько отработал. Экономим минимум 2 часа в день на учёте."',
+    name: 'Руслан А.', role: 'Охранное предприятие', city: 'Ташкент',
+    metric: '−2 ч/день', metricLabel: 'на ручной учёт', init: 'РА',
+    grad: 'from-violet-500 to-indigo-500',
+  },
+  {
+    text: '"У нас 5 строительных объектов по городу. Раньше звонили каждому прорабу чтобы узнать кто пришёл. Сейчас открываю GeoTime — вижу всё сразу. Внедрили за день без IT-специалиста."',
+    name: 'Санжар Т.', role: 'Строительная компания', city: 'Ташкент',
+    metric: '5 объектов', metricLabel: 'под контролем', init: 'СТ',
+    grad: 'from-orange-400 to-amber-500',
+  },
+  {
+    text: '"Клининговый бизнес — это десятки объектов и почасовые сотрудники. GeoTime решил проблему приписок и споров. Теперь у меня чёткие данные для расчёта зарплаты каждому сотруднику."',
+    name: 'Нилуфар К.', role: 'Клининговый сервис', city: 'Самарканд',
+    metric: '30+ объектов', metricLabel: 'под контролем', init: 'НК',
+    grad: 'from-pink-500 to-rose-500',
+  },
+  {
+    text: '"Курьеры начали работать честнее. Они знают что смена фиксирует GPS — нет больше «я уже выехал» когда он ещё дома. Внедрение заняло 10 минут. Платим только за реальные часы."',
+    name: 'Баходир У.', role: 'Служба доставки', city: 'Ташкент',
+    metric: '+20%', metricLabel: 'пунктуальность', init: 'БУ',
+    grad: 'from-green-500 to-emerald-500',
+  },
+];
+
+const TestimonialsCarousel = () => {
+  const [active, setActive] = useState(0);
+  const [animIn, setAnimIn] = useState(true);
+  const activeRef = useRef(0);
+  const { ref: sectionRef, visible: sectionVisible } = useScrollReveal(0.15);
+
+  const goTo = (idx: number) => {
+    setAnimIn(false);
+    setTimeout(() => {
+      activeRef.current = idx;
+      setActive(idx);
+      setAnimIn(true);
+    }, 280);
+  };
+
+  useEffect(() => {
+    if (!sectionVisible) return;
+    const id = setInterval(() => {
+      const next = (activeRef.current + 1) % ALL_TESTIMONIALS.length;
+      goTo(next);
+    }, 5500);
+    return () => clearInterval(id);
+  }, [sectionVisible]);
+
+  const tc = ALL_TESTIMONIALS[active];
+
+  return (
+    <div ref={sectionRef} className="max-w-3xl mx-auto">
+      <div className="flex justify-center gap-1 mb-8">
+        {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />)}
+      </div>
+
+      <div
+        className="relative bg-gradient-to-br from-violet-50 to-indigo-50/80 rounded-3xl border border-violet-100 p-8 sm:p-10 shadow-lg overflow-hidden"
+        style={{
+          opacity: animIn ? 1 : 0,
+          transform: animIn ? 'translateY(0)' : 'translateY(14px)',
+          transition: 'opacity 0.28s ease, transform 0.28s ease',
+        }}
+      >
+        {/* Metric badge */}
+        <div className={`absolute top-6 right-6 sm:top-8 sm:right-8 bg-gradient-to-r ${tc.grad} text-white px-4 py-2 rounded-2xl shadow-lg text-center`}>
+          <div className="text-sm font-extrabold leading-none">{tc.metric}</div>
+          <div className="text-[10px] opacity-85 mt-0.5">{tc.metricLabel}</div>
+        </div>
+
+        {/* Quote icon */}
+        <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${tc.grad} flex items-center justify-center mb-6 shadow-md`}>
+          <span className="text-white text-2xl font-bold leading-none" style={{ fontFamily: 'Georgia, serif' }}>"</span>
+        </div>
+
+        <p className="text-base sm:text-lg text-gray-800 leading-relaxed font-medium mb-6 sm:pr-28">{tc.text}</p>
+
+        <div className="flex items-center gap-3 pt-4 border-t border-violet-100">
+          <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${tc.grad} flex items-center justify-center text-white text-sm font-bold shadow-md shrink-0`}>
+            {tc.init}
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-gray-900">{tc.name}</div>
+            <div className="text-xs text-gray-400">{tc.role} · {tc.city}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Dot navigation */}
+      <div className="flex justify-center items-center gap-2.5 mt-6">
+        {ALL_TESTIMONIALS.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            className={`rounded-full transition-all duration-300 ${
+              active === i ? 'w-8 h-2.5 bg-violet-600' : 'w-2.5 h-2.5 bg-gray-300 hover:bg-gray-400'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ─── GPS MAP MOCKUP ───────────────────────────────────────────────────────────
 const GpsMapMockup = () => (
   <div
@@ -917,6 +1265,9 @@ const Welcome = () => {
         </div>
       </section>
 
+      {/* COMPARISON */}
+      <ComparisonTable />
+
       {/* HOW IT WORKS */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto">
@@ -1106,25 +1457,14 @@ const Welcome = () => {
         </div>
       </section>
 
+      {/* INDUSTRIES */}
+      <IndustriesTabs />
+
       {/* STATS + TESTIMONIAL */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto space-y-8">
           <StatsRow stats={t.stats} />
-          <div className="bg-gradient-to-br from-violet-50 to-indigo-50 rounded-3xl border border-violet-100 p-6 sm:p-8">
-            <div className="flex gap-0.5 mb-3">
-              {[...Array(5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />)}
-            </div>
-            <p className="text-sm sm:text-base text-gray-700 leading-relaxed mb-4">{t.testimonial.text}</p>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-400 flex items-center justify-center text-white text-xs font-bold">
-                {t.testimonial.name[0]}
-              </div>
-              <div>
-                <div className="text-sm font-medium">{t.testimonial.name}</div>
-                <div className="text-xs text-gray-400">{t.testimonial.role}</div>
-              </div>
-            </div>
-          </div>
+          <TestimonialsCarousel />
         </div>
       </section>
 
