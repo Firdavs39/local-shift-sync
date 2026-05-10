@@ -47,13 +47,13 @@ async function authenticate(
   // Format check before hash lookup (cheap, prevents log pollution)
   if (!isValidKeyFormat(rawKey)) {
     // Constant-time-ish: still hash a dummy to avoid timing leak
-    try { await hashApiKey('gtk_v1_live_dummy_' + 'A'.repeat(32)); } catch {}
+    try { await hashApiKey('gtk_v1_live_dummy_' + 'A'.repeat(32), supabaseAdmin); } catch {}
     return { error: errorResponse('Invalid API key format', 401, 'invalid_format') };
   }
 
   let hashHex: string;
   try {
-    const hash = await hashApiKey(rawKey);
+    const hash = await hashApiKey(rawKey, supabaseAdmin);
     hashHex = hashToHex(hash);
   } catch (err) {
     console.error('[bot-api] hash error:', err);

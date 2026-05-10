@@ -581,6 +581,12 @@ tools:
 
 ---
 
+## Установка / деплой
+
+API полностью самодостаточен. После применения SQL миграций (через `npx supabase db push` или Supabase MCP) и деплоя двух Edge Functions (`bot-api`, `manage-api-keys`) система сразу готова.
+
+**Pepper для HMAC-хеширования** генерируется автоматически при первом запуске миграции `20260510113014_bot_api_pepper_table.sql` (хранится в таблице `bot_api_secrets`, доступен только service_role через RPC `get_api_key_pepper()`). Никаких ручных шагов в Dashboard.
+
 ## Поддержка
 
 - Issue tracker: https://github.com/Firdavs39/local-shift-sync/issues

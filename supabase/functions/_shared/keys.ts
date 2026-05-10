@@ -1,10 +1,14 @@
 // API key generation, hashing, validation
 // Format: gtk_v1_<env>_<slug>_<random32_base62>
 // Hash: HMAC-SHA-256(pepper, full_key)
-// Pepper stored as Supabase Secret API_KEY_PEPPER
+// Pepper stored in public.bot_api_secrets, fetched via get_api_key_pepper() RPC.
+// Cached in-memory per isolate (fast path after first call).
 
 const KEY_PREFIX_REGEX = /^gtk_v1_(live|test)_[a-z0-9-]+_[A-Za-z0-9]{32}$/;
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+let _cachedPepper: { value: string; expires: number } | null = null;
+const PEPPER_CACHE_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Generate a new API key plaintext.
@@ -38,15 +42,35 @@ export function getKeyLast4(key: string): string {
 }
 
 /**
- * HMAC-SHA-256(pepper, key) → hex string for storage as bytea.
- * Pepper read from API_KEY_PEPPER env var.
+ * Fetch pepper from DB via RPC (cached for 5 min per isolate).
+ * supabaseAdmin must be a service-role client.
  */
-export async function hashApiKey(key: string): Promise<Uint8Array> {
-  const pepper = Deno.env.get('API_KEY_PEPPER');
-  if (!pepper || pepper.length < 16) {
-    throw new Error('API_KEY_PEPPER not configured (must be ≥16 chars)');
+async function getPepper(supabaseAdmin: any): Promise<string> {
+  const now = Date.now();
+  if (_cachedPepper && _cachedPepper.expires > now) {
+    return _cachedPepper.value;
   }
 
+  // Fall back to env var if explicitly set (for local dev/testing)
+  const envPepper = Deno.env.get('API_KEY_PEPPER');
+  if (envPepper && envPepper.length >= 16) {
+    _cachedPepper = { value: envPepper, expires: now + PEPPER_CACHE_MS };
+    return envPepper;
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('get_api_key_pepper');
+  if (error || !data || typeof data !== 'string' || data.length < 16) {
+    throw new Error(`Pepper not configured: ${error?.message ?? 'no value returned'}`);
+  }
+  _cachedPepper = { value: data, expires: now + PEPPER_CACHE_MS };
+  return data;
+}
+
+/**
+ * HMAC-SHA-256(pepper, key) → Uint8Array.
+ */
+export async function hashApiKey(key: string, supabaseAdmin: any): Promise<Uint8Array> {
+  const pepper = await getPepper(supabaseAdmin);
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
     'raw',

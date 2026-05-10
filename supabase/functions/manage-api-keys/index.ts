@@ -220,7 +220,7 @@ async function handleCreate(req: Request, ctx: AdminContext, supabase: any) {
   const plainKey = generateApiKey(keyEnv, ctx.company_slug);
   let keyHash: Uint8Array;
   try {
-    keyHash = await hashApiKey(plainKey);
+    keyHash = await hashApiKey(plainKey, supabase);
   } catch (err) {
     console.error('[manage] hash error:', err);
     return errorResponse('Server pepper not configured', 500, 'pepper_missing');
@@ -521,7 +521,7 @@ async function handleRotate(req: Request, ctx: AdminContext, supabase: any, keyI
   const plainKey = generateApiKey('live', ctx.company_slug);
   let keyHash: Uint8Array;
   try {
-    keyHash = await hashApiKey(plainKey);
+    keyHash = await hashApiKey(plainKey, supabase);
   } catch {
     return errorResponse('Server pepper not configured', 500, 'pepper_missing');
   }
