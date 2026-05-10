@@ -15,6 +15,7 @@ import Settings from "./pages/Settings";
 import Register from "./pages/Register";
 import Billing from "./pages/Billing";
 import TelegramSettings from "./pages/TelegramSettings";
+import ApiKeys from "./pages/ApiKeys";
 import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
@@ -83,6 +84,11 @@ function App() {
           <Route path="/admin/telegram" element={
             <ProtectedRoute requireAdmin>
               <TelegramSettings />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/api-keys" element={
+            <ProtectedRoute requireAdmin>
+              <ApiKeys />
             </ProtectedRoute>
           } />
 

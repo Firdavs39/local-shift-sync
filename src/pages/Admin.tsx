@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout, isAdmin, UserWithRole } from '@/lib/supabase-auth';
-import { Users, MapPin, FileBarChart, LogOut, Settings, CreditCard, Send } from 'lucide-react';
+import { Users, MapPin, FileBarChart, LogOut, Settings, CreditCard, Send, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -200,6 +200,20 @@ const Admin = () => {
             </p>
             <Button variant="outline" className="w-full border-2" onClick={() => navigate('/admin/telegram')}>
               Настроить уведомления
+            </Button>
+          </Card>
+
+          {/* API Keys */}
+          <Card className="p-8 space-y-4 hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate('/admin/api-keys')}>
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <KeyRound className="w-7 h-7 text-white" />
+            </div>
+            <h3 className="text-2xl font-bold">API-ключи</h3>
+            <p className="text-muted-foreground">
+              Доступ для AI-агентов, Telegram-ботов, n8n и других интеграций
+            </p>
+            <Button variant="outline" className="w-full border-2" onClick={() => navigate('/admin/api-keys')}>
+              Управление ключами
             </Button>
           </Card>
         </div>
