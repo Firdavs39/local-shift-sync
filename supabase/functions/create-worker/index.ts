@@ -118,6 +118,19 @@ serve(async (req) => {
       throw new Error('Пользователь с таким именем уже существует');
     }
 
+    // Check if PIN is already taken in this company (UNIQUE(company_id, pin) constraint)
+    const { data: existingPin, error: pinCheckError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name')
+      .eq('company_id', companyId)
+      .eq('pin', pin)
+      .limit(1);
+
+    if (pinCheckError) throw pinCheckError;
+    if (existingPin && existingPin.length > 0) {
+      throw new Error(`PIN ${pin} уже используется другим сотрудником этой компании. Выберите другой 4-значный код.`);
+    }
+
     // Build email: transliterate name, remove spaces and any non-alphanumeric chars
     // (handles Latin Uzbek names with apostrophes like O'rinboy, G'ayrat)
     const transliteratedName = transliterate(fullName).replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
