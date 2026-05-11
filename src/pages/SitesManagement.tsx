@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, MapPin, Plus, Trash2, Navigation, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { getDistance } from '@/lib/geo';
+import { getDistance, getCurrentPositionAccurate } from '@/lib/geo';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Site {
@@ -40,48 +40,51 @@ const SitesManagement = () => {
   const [geoError, setGeoError] = useState<string | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
 
-  // Helper: request geolocation with a typed error reason
-  const requestGeolocation = (silent = false): Promise<{ lat: number; lon: number } | null> => {
-    return new Promise((resolve) => {
-      if (typeof window === 'undefined' || !('geolocation' in navigator)) {
-        setGeoError('Браузер не поддерживает геолокацию');
-        if (!silent) toast.error('Браузер не поддерживает геолокацию');
-        resolve(null);
-        return;
+  // Helper: request geolocation with multi-sample accuracy and typed error reason
+  const requestGeolocation = async (silent = false): Promise<{ lat: number; lon: number; accuracy?: number } | null> => {
+    if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+      setGeoError('Браузер не поддерживает геолокацию');
+      if (!silent) toast.error('Браузер не поддерживает геолокацию');
+      return null;
+    }
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      setGeoError('Геолокация работает только по HTTPS. Открой сайт через https://… или localhost');
+      if (!silent) toast.error('Геолокация работает только по HTTPS');
+      return null;
+    }
+    setGeoLoading(true);
+    try {
+      const pos = await getCurrentPositionAccurate({
+        targetAccuracyM: 20,   // for setting site coords we want it tight
+        maxSamples: 4,
+        timeoutMs: 15000,
+      });
+      const loc = { lat: pos.lat, lon: pos.lon, accuracy: pos.accuracy };
+      setUserLocation(loc);
+      setGeoError(null);
+      setGeoLoading(false);
+      if (!silent && pos.accuracy > 50) {
+        toast.warning(`GPS точность ±${Math.round(pos.accuracy)}м — для точного определения координат объекта выйди на улицу.`);
       }
-      if (typeof window !== 'undefined' && window.isSecureContext === false) {
-        setGeoError('Геолокация работает только по HTTPS. Открой сайт через https://… или localhost');
-        if (!silent) toast.error('Геолокация работает только по HTTPS');
-        resolve(null);
-        return;
+      return loc;
+    } catch (error: any) {
+      setGeoLoading(false);
+      const code = error?.code;
+      let msg = 'Геолокация недоступна';
+      if (code === 1 || /denied/i.test(error?.message ?? '')) {
+        msg = 'Доступ к геолокации запрещён. Разреши в настройках браузера (значок замка в адресной строке → Местоположение → Разрешить).';
+      } else if (code === 2) {
+        msg = 'Не удалось определить координаты. Проверь GPS/Wi-Fi или попробуй на улице.';
+      } else if (code === 3) {
+        msg = 'Превышено время ожидания GPS. Попробуй ещё раз.';
+      } else if (error?.message) {
+        msg = error.message;
       }
-      setGeoLoading(true);
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const loc = { lat: position.coords.latitude, lon: position.coords.longitude };
-          setUserLocation(loc);
-          setGeoError(null);
-          setGeoLoading(false);
-          resolve(loc);
-        },
-        (error) => {
-          setGeoLoading(false);
-          let msg = 'Геолокация недоступна';
-          if (error.code === error.PERMISSION_DENIED) {
-            msg = 'Доступ к геолокации запрещён. Разреши в настройках браузера или сайта (значок замка в адресной строке → Местоположение → Разрешить).';
-          } else if (error.code === error.POSITION_UNAVAILABLE) {
-            msg = 'Не удалось определить координаты. Проверь GPS/Wi-Fi или попробуй на улице.';
-          } else if (error.code === error.TIMEOUT) {
-            msg = 'Превышено время ожидания GPS. Попробуй ещё раз.';
-          }
-          setGeoError(msg);
-          if (!silent) toast.error(msg);
-          console.error('Geolocation error:', error.code, error.message);
-          resolve(null);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
-      );
-    });
+      setGeoError(msg);
+      if (!silent) toast.error(msg);
+      console.error('Geolocation error:', code, error?.message);
+      return null;
+    }
   };
 
   useEffect(() => {

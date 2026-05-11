@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentPosition, isWithinRadius, getDistance } from '@/lib/geo';
+import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance } from '@/lib/geo';
 import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate } from '@/lib/time';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -50,9 +50,10 @@ const Me = () => {
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [sites, setSites] = useState<Site[]>([]);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number; accuracy?: number } | null>(null);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -106,19 +107,16 @@ const Me = () => {
       }
     };
 
-    // Get current location
-    getCurrentPosition()
-      .then(position => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lon: position.coords.longitude,
-        });
+    // Get current location with multi-sample accuracy improvement
+    getCurrentPositionAccurate({ targetAccuracyM: 50, maxSamples: 3, timeoutMs: 12000 })
+      .then(pos => {
+        setUserLocation({ lat: pos.lat, lon: pos.lon, accuracy: pos.accuracy });
+        setGpsAccuracy(pos.accuracy);
         setLocationDenied(false);
       })
-      .catch((error: GeolocationPositionError) => {
+      .catch((error: any) => {
         console.error('Error getting location:', error);
-        if (error.code === 1) {
-          // PERMISSION_DENIED
+        if (error?.code === 1 || /denied/i.test(error?.message ?? '')) {
           setLocationDenied(true);
         }
       });
@@ -176,19 +174,32 @@ const Me = () => {
 
     const monitorLocation = async () => {
       try {
-        const position = await getCurrentPosition();
-        const { latitude, longitude } = position.coords;
-        setUserLocation({ lat: latitude, lon: longitude });
+        // Take up to 2 samples (5-7s) to avoid acting on a single bad fix
+        const pos = await getCurrentPositionAccurate({ targetAccuracyM: 30, maxSamples: 2, timeoutMs: 7000 });
+        setUserLocation({ lat: pos.lat, lon: pos.lon, accuracy: pos.accuracy });
+        setGpsAccuracy(pos.accuracy);
 
         // Find the site for this shift
         const site = sites.find(s => s.id === activeShift.site_id);
         if (!site) return;
 
-        const isWithinSite = isWithinRadius(latitude, longitude, site.lat, site.lon, site.radius_m);
+        // Don't act on garbage GPS — cell-only fixes can be ±500m
+        if (pos.accuracy > 150) {
+          console.log('[monitor] skipping action: GPS accuracy too poor:', pos.accuracy);
+          return;
+        }
+
+        const evaluation = evaluateRadius(pos.lat, pos.lon, site.lat, site.lon, site.radius_m, pos.accuracy);
         const pauseReason = getCurrentPauseReason(activeShift);
 
-        // Case 1: outside radius AND not paused → auto-pause
-        if (!isWithinSite && !activeShift.is_paused) {
+        // 'uncertain' = sitting on the radius edge → don't toggle pause state (anti-flicker)
+        if (evaluation.verdict === 'uncertain') {
+          console.log('[monitor] verdict=uncertain, no action', evaluation);
+          return;
+        }
+
+        // Case 1: definitely outside AND not paused → auto-pause
+        if (evaluation.verdict === 'outside' && !activeShift.is_paused) {
           const now = new Date().toISOString();
           const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
 
@@ -209,9 +220,9 @@ const Me = () => {
           return;
         }
 
-        // Case 2: back inside radius AND currently on AUTO pause → auto-resume
+        // Case 2: definitely inside radius AND currently on AUTO pause → auto-resume
         // (manual pauses are NOT auto-resumed — user must press the button)
-        if (isWithinSite && activeShift.is_paused && pauseReason === 'auto') {
+        if (evaluation.verdict === 'inside' && activeShift.is_paused && pauseReason === 'auto') {
           const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
           const lastPause = pauseHistory[pauseHistory.length - 1];
 
@@ -350,16 +361,28 @@ const Me = () => {
         return;
       }
 
-      const position = await getCurrentPosition();
-      const { latitude, longitude } = position.coords;
+      // Take 3 GPS samples for an accurate fix before committing
+      const pos = await getCurrentPositionAccurate({ targetAccuracyM: 30, maxSamples: 3, timeoutMs: 12000 });
+      const { lat: latitude, lon: longitude, accuracy } = pos;
+      setUserLocation({ lat: latitude, lon: longitude, accuracy });
+      setGpsAccuracy(accuracy);
 
-      // Check if within selected site radius
-      const isWithinSite = isWithinRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m);
+      // Refuse to start with poor GPS — too risky for shift accounting
+      if (accuracy > 100) {
+        toast.error(`Слишком плохой GPS-сигнал (±${Math.round(accuracy)}м). Выйди на улицу или подожди и попробуй снова.`);
+        return;
+      }
 
-      // Block shift start if not within radius
-      if (!isWithinSite) {
-        const distance = getDistance(latitude, longitude, selectedSite.lat, selectedSite.lon);
-        toast.error(`Вы находитесь вне радиуса объекта! Расстояние: ${Math.round(distance)}м (допустимо: ${selectedSite.radius_m}м)`);
+      // Accuracy-aware radius check — refuses if we're not definitely inside
+      const evaluation = evaluateRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m, accuracy);
+
+      if (evaluation.verdict === 'outside') {
+        toast.error(`Вы вне радиуса объекта. Расстояние: ${Math.round(evaluation.distance)}м (допустимо: ${selectedSite.radius_m}м, погрешность GPS ±${Math.round(accuracy)}м)`);
+        return;
+      }
+
+      if (evaluation.verdict === 'uncertain') {
+        toast.error(`Граница радиуса. Подойди ближе к центру объекта (расстояние ${Math.round(evaluation.distance)}м, погрешность GPS ±${Math.round(accuracy)}м, радиус ${selectedSite.radius_m}м).`);
         return;
       }
 
@@ -444,8 +467,9 @@ const Me = () => {
     if (!activeShift) return;
 
     try {
-      const position = await getCurrentPosition();
-      const { latitude, longitude } = position.coords;
+      const pos = await getCurrentPositionAccurate({ targetAccuracyM: 30, maxSamples: 3, timeoutMs: 12000 });
+      const { lat: latitude, lon: longitude, accuracy } = pos;
+      setGpsAccuracy(accuracy);
 
       // Find the site for this shift
       const site = sites.find(s => s.id === activeShift.site_id);
@@ -454,12 +478,21 @@ const Me = () => {
         return;
       }
 
-      // Check if within site radius
-      const isWithinSite = isWithinRadius(latitude, longitude, site.lat, site.lon, site.radius_m);
-      
-      if (!isWithinSite) {
-        const distance = getDistance(latitude, longitude, site.lat, site.lon);
-        toast.error(`Нельзя завершить смену вне радиуса объекта! Расстояние: ${Math.round(distance)}м (допустимо: ${site.radius_m}м)`);
+      if (accuracy > 100) {
+        toast.error(`Слишком плохой GPS-сигнал (±${Math.round(accuracy)}м). Подожди немного и попробуй снова.`);
+        return;
+      }
+
+      // Accuracy-aware check
+      const evaluation = evaluateRadius(latitude, longitude, site.lat, site.lon, site.radius_m, accuracy);
+
+      if (evaluation.verdict === 'outside') {
+        toast.error(`Нельзя завершить смену вне радиуса объекта. Расстояние: ${Math.round(evaluation.distance)}м (допустимо: ${site.radius_m}м)`);
+        return;
+      }
+
+      if (evaluation.verdict === 'uncertain') {
+        toast.error(`Граница радиуса. Подойди ближе к объекту чтобы завершить смену (расстояние ${Math.round(evaluation.distance)}м, GPS ±${Math.round(accuracy)}м).`);
         return;
       }
 
@@ -552,6 +585,19 @@ const Me = () => {
           <Clock className="w-12 h-12 mx-auto mb-4 text-primary" />
           <div className="text-4xl font-bold mb-2">{formatTime(currentTime)}</div>
           <div className="text-muted-foreground">{formatDate(currentTime)}</div>
+          {gpsAccuracy !== null && (
+            <div className="mt-3 text-xs flex items-center justify-center gap-1">
+              <MapPin className="w-3 h-3" />
+              <span className={
+                gpsAccuracy <= 30 ? 'text-green-600 dark:text-green-400' :
+                gpsAccuracy <= 100 ? 'text-yellow-600 dark:text-yellow-400' :
+                'text-orange-600 dark:text-orange-400'
+              }>
+                GPS точность ±{Math.round(gpsAccuracy)}м
+                {gpsAccuracy > 100 && ' — выйди на улицу для точного замера'}
+              </span>
+            </div>
+          )}
         </Card>
 
         {/* My Shifts Button */}
