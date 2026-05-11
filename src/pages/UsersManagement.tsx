@@ -126,11 +126,23 @@ const UsersManagement = () => {
 
       if (error) {
         console.error('Edge function error:', error);
-        throw error;
+        // supabase.functions.invoke wraps non-2xx into a generic "Edge Function returned a non-2xx
+        // status code" message — extract the real server error from response body instead
+        let realMessage = error.message;
+        const response = (error as any)?.context?.response;
+        if (response && typeof response.json === 'function') {
+          try {
+            const body = await response.clone().json();
+            if (body?.error) realMessage = typeof body.error === 'string' ? body.error : body.error.message ?? realMessage;
+          } catch {
+            // body wasn't JSON — keep the original message
+          }
+        }
+        throw new Error(realMessage);
       }
 
       if (data && data.error) {
-        throw new Error(data.error);
+        throw new Error(typeof data.error === 'string' ? data.error : data.error.message ?? 'Ошибка');
       }
 
       toast.success('Пользователь создан');
@@ -144,13 +156,19 @@ const UsersManagement = () => {
     } catch (error: any) {
       console.error('Error creating user:', error);
       const errorMessage = error.message || String(error);
-      
-      if (errorMessage.includes('уже существует')) {
+
+      if (errorMessage.includes('PIN') && (errorMessage.includes('используется') || errorMessage.includes('занят'))) {
         toast.error(errorMessage);
-      } else if (errorMessage.includes('PIN must be')) {
+      } else if (errorMessage.includes('уже существует')) {
+        toast.error(errorMessage);
+      } else if (errorMessage.includes('PIN must be') || errorMessage.includes('4 цифр')) {
         toast.error('PIN должен состоять из 4 цифр');
       } else if (errorMessage.includes('Missing required fields')) {
         toast.error('Заполните все обязательные поля');
+      } else if (errorMessage.includes('Достигнут лимит')) {
+        toast.error(errorMessage);
+      } else if (errorMessage.includes('non-2xx')) {
+        toast.error('Ошибка сервера. Проверь PIN — возможно он уже занят, или имя дублируется.');
       } else {
         toast.error(`Ошибка создания пользователя: ${errorMessage}`);
       }

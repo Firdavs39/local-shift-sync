@@ -37,23 +37,56 @@ const SitesManagement = () => {
     tz: 'Europe/Moscow'
   });
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  // Helper: request geolocation with a typed error reason
+  const requestGeolocation = (silent = false): Promise<{ lat: number; lon: number } | null> => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+        setGeoError('Браузер не поддерживает геолокацию');
+        if (!silent) toast.error('Браузер не поддерживает геолокацию');
+        resolve(null);
+        return;
+      }
+      if (typeof window !== 'undefined' && window.isSecureContext === false) {
+        setGeoError('Геолокация работает только по HTTPS. Открой сайт через https://… или localhost');
+        if (!silent) toast.error('Геолокация работает только по HTTPS');
+        resolve(null);
+        return;
+      }
+      setGeoLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const loc = { lat: position.coords.latitude, lon: position.coords.longitude };
+          setUserLocation(loc);
+          setGeoError(null);
+          setGeoLoading(false);
+          resolve(loc);
+        },
+        (error) => {
+          setGeoLoading(false);
+          let msg = 'Геолокация недоступна';
+          if (error.code === error.PERMISSION_DENIED) {
+            msg = 'Доступ к геолокации запрещён. Разреши в настройках браузера или сайта (значок замка в адресной строке → Местоположение → Разрешить).';
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            msg = 'Не удалось определить координаты. Проверь GPS/Wi-Fi или попробуй на улице.';
+          } else if (error.code === error.TIMEOUT) {
+            msg = 'Превышено время ожидания GPS. Попробуй ещё раз.';
+          }
+          setGeoError(msg);
+          if (!silent) toast.error(msg);
+          console.error('Geolocation error:', error.code, error.message);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+      );
+    });
+  };
 
   useEffect(() => {
     loadSites();
-    
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lon: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-        }
-      );
-    }
+    requestGeolocation(true); // silent on mount — show error only when user clicks the button
 
     // Auto-refresh on window focus
     const handleFocus = () => {
@@ -167,17 +200,21 @@ const SitesManagement = () => {
     loadSites();
   };
 
-  const handleUseCurrentLocation = () => {
-    if (userLocation) {
+  const handleUseCurrentLocation = async () => {
+    // Try cached location first; if none, request fresh
+    let loc = userLocation;
+    if (!loc) {
+      loc = await requestGeolocation(false);
+    }
+    if (loc) {
       setFormData({
         ...formData,
-        lat: userLocation.lat.toFixed(6),
-        lon: userLocation.lon.toFixed(6)
+        lat: loc.lat.toFixed(6),
+        lon: loc.lon.toFixed(6)
       });
       toast.success('Координаты установлены');
-    } else {
-      toast.error('Геолокация недоступна');
     }
+    // If null — error toast already shown by requestGeolocation
   };
 
   const getDistanceToSite = (site: Site) => {
@@ -214,12 +251,39 @@ const SitesManagement = () => {
       <main className="container mx-auto px-4 py-8 space-y-6">
         {userLocation && (
           <Card className="p-4 bg-primary/5 border-primary/20">
-            <div className="flex items-center gap-2 text-sm">
-              <Navigation className="w-4 h-4 text-primary" />
-              <span className="font-medium">Ваша геолокация:</span>
-              <span className="text-muted-foreground">
-                {userLocation.lat.toFixed(6)}, {userLocation.lon.toFixed(6)}
-              </span>
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Navigation className="w-4 h-4 text-primary" />
+                <span className="font-medium">Ваша геолокация:</span>
+                <span className="text-muted-foreground">
+                  {userLocation.lat.toFixed(6)}, {userLocation.lon.toFixed(6)}
+                </span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => requestGeolocation(false)} disabled={geoLoading}>
+                <RefreshCw className={`w-3 h-3 mr-1 ${geoLoading ? 'animate-spin' : ''}`} />
+                Обновить
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {!userLocation && geoError && (
+          <Card className="p-4 bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900">
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 text-sm">
+                <Navigation className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="font-medium text-orange-900 dark:text-orange-200">Геолокация недоступна</div>
+                  <div className="text-orange-800 dark:text-orange-300 text-xs mt-1">{geoError}</div>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => requestGeolocation(false)} disabled={geoLoading}>
+                {geoLoading ? (
+                  <><RefreshCw className="w-3 h-3 mr-1 animate-spin" />Запрашиваю…</>
+                ) : (
+                  <><Navigation className="w-3 h-3 mr-1" />Попробовать снова</>
+                )}
+              </Button>
             </div>
           </Card>
         )}
