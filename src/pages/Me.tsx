@@ -6,7 +6,7 @@ import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, isWithinRadius, getDistance } from '@/lib/geo';
 import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate } from '@/lib/time';
-import { Clock, MapPin, LogOut, Play, Square, Smartphone, History } from 'lucide-react';
+import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Site {
@@ -159,7 +159,18 @@ const Me = () => {
     };
   }, [user]);
 
-  // Monitor location during active shift
+  // Helper: get reason of the last (open) pause entry — 'manual' | 'auto' | null
+  const getCurrentPauseReason = (shift: Shift | null): 'manual' | 'auto' | null => {
+    if (!shift?.is_paused) return null;
+    const history = Array.isArray(shift.pause_history) ? shift.pause_history : [];
+    const last = history[history.length - 1];
+    if (!last || last.resumed_at) return null;
+    // Legacy entries (before this feature) didn't have `reason` → treat as 'auto'
+    return last.reason === 'manual' ? 'manual' : 'auto';
+  };
+
+  // Monitor location during active shift — only handles AUTO pause/resume.
+  // Manual pauses are not affected by location.
   useEffect(() => {
     if (!activeShift || activeShift.ended_at) return;
 
@@ -167,43 +178,49 @@ const Me = () => {
       try {
         const position = await getCurrentPosition();
         const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lon: longitude });
 
         // Find the site for this shift
         const site = sites.find(s => s.id === activeShift.site_id);
         if (!site) return;
 
         const isWithinSite = isWithinRadius(latitude, longitude, site.lat, site.lon, site.radius_m);
+        const pauseReason = getCurrentPauseReason(activeShift);
 
-        // Check if pause state needs to change
+        // Case 1: outside radius AND not paused → auto-pause
         if (!isWithinSite && !activeShift.is_paused) {
-          // User left the site - pause the shift
           const now = new Date().toISOString();
           const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
-          
+
           const { error } = await supabase
             .from('shifts')
             .update({
               is_paused: true,
               paused_at: now,
-              pause_history: [...pauseHistory, { paused_at: now }],
+              pause_history: [...pauseHistory, { paused_at: now, reason: 'auto' }],
             })
             .eq('id', activeShift.id);
 
           if (!error) {
-            toast.warning('Смена приостановлена - вы вышли из зоны объекта');
+            toast.warning('⚠️ Вы вышли из зоны объекта. Смена приостановлена автоматически.', {
+              duration: 6000,
+            });
           }
-        } else if (isWithinSite && activeShift.is_paused) {
-          // User returned to site - resume the shift
+          return;
+        }
+
+        // Case 2: back inside radius AND currently on AUTO pause → auto-resume
+        // (manual pauses are NOT auto-resumed — user must press the button)
+        if (isWithinSite && activeShift.is_paused && pauseReason === 'auto') {
           const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
           const lastPause = pauseHistory[pauseHistory.length - 1];
-          
+
           if (lastPause && !lastPause.resumed_at) {
             const now = new Date();
             const pausedAt = new Date(activeShift.paused_at!);
-            const pausedMinutes = Math.floor((now.getTime() - pausedAt.getTime()) / 60000);
-            
+            const pausedMinutes = Math.max(0, Math.floor((now.getTime() - pausedAt.getTime()) / 60000));
             lastPause.resumed_at = now.toISOString();
-            
+
             const { error } = await supabase
               .from('shifts')
               .update({
@@ -215,7 +232,9 @@ const Me = () => {
               .eq('id', activeShift.id);
 
             if (!error) {
-              toast.success('Смена возобновлена - вы вернулись в зону объекта');
+              toast.success('✅ Вы вернулись в зону объекта. Смена автоматически возобновлена.', {
+                duration: 6000,
+              });
             }
           }
         }
@@ -231,6 +250,67 @@ const Me = () => {
 
     return () => clearInterval(interval);
   }, [activeShift, sites]);
+
+  // Manual pause: user presses "Пауза"
+  const handlePauseShift = async () => {
+    if (!activeShift || activeShift.is_paused) return;
+    const now = new Date().toISOString();
+    const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
+
+    const { error } = await supabase
+      .from('shifts')
+      .update({
+        is_paused: true,
+        paused_at: now,
+        pause_history: [...pauseHistory, { paused_at: now, reason: 'manual' }],
+      })
+      .eq('id', activeShift.id);
+
+    if (error) {
+      toast.error('Не удалось поставить на паузу');
+      console.error(error);
+    } else {
+      toast.info('⏸ Смена на паузе');
+    }
+  };
+
+  // Manual resume: user presses "Возобновить" (only valid for manual pauses)
+  const handleResumeShift = async () => {
+    if (!activeShift || !activeShift.is_paused) return;
+    const pauseReason = getCurrentPauseReason(activeShift);
+    if (pauseReason !== 'manual') {
+      toast.error('Смена на автопаузе. Вернитесь в радиус объекта — она возобновится сама.');
+      return;
+    }
+
+    const pauseHistory = Array.isArray(activeShift.pause_history) ? [...activeShift.pause_history] : [];
+    const lastIndex = pauseHistory.length - 1;
+    if (lastIndex < 0) return;
+    const lastPause = { ...pauseHistory[lastIndex] };
+
+    const now = new Date();
+    const pausedAt = new Date(activeShift.paused_at!);
+    const pausedMinutes = Math.max(0, Math.floor((now.getTime() - pausedAt.getTime()) / 60000));
+    lastPause.resumed_at = now.toISOString();
+    pauseHistory[lastIndex] = lastPause;
+
+    const { error } = await supabase
+      .from('shifts')
+      .update({
+        is_paused: false,
+        paused_at: null,
+        total_paused_minutes: (activeShift.total_paused_minutes || 0) + pausedMinutes,
+        pause_history: pauseHistory,
+      })
+      .eq('id', activeShift.id);
+
+    if (error) {
+      toast.error('Не удалось возобновить смену');
+      console.error(error);
+    } else {
+      toast.success(`▶️ Смена возобновлена. Пауза длилась ${pausedMinutes} мин`);
+    }
+  };
 
   const toggleWakeLock = async () => {
     try {
@@ -501,11 +581,18 @@ const Me = () => {
               </div>
             )}
             
-            {activeShift.is_paused && (
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-500">
-                ⚠️ Вы находитесь вне радиуса объекта. Время не учитывается.
-              </div>
-            )}
+            {activeShift.is_paused && (() => {
+              const reason = getCurrentPauseReason(activeShift);
+              return reason === 'manual' ? (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-600 dark:text-blue-400">
+                  ⏸ Смена на ручной паузе. Нажми «Возобновить» чтобы продолжить.
+                </div>
+              ) : (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-sm text-yellow-600 dark:text-yellow-500">
+                  ⚠️ Автопауза: вы вне радиуса объекта. Время не учитывается. Вернитесь в зону — смена сама возобновится.
+                </div>
+              );
+            })()}
             
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -533,6 +620,30 @@ const Me = () => {
                 </div>
               )}
             </div>
+
+            {/* Manual pause / resume buttons */}
+            {!activeShift.is_paused && (
+              <Button
+                onClick={handlePauseShift}
+                variant="outline"
+                className="w-full border-2 border-yellow-500/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                size="lg"
+              >
+                <Pause className="w-5 h-5 mr-2" />
+                Поставить на паузу
+              </Button>
+            )}
+            {activeShift.is_paused && getCurrentPauseReason(activeShift) === 'manual' && (
+              <Button
+                onClick={handleResumeShift}
+                variant="outline"
+                className="w-full border-2 border-accent text-accent hover:bg-accent/10"
+                size="lg"
+              >
+                <PlayCircle className="w-5 h-5 mr-2" />
+                Возобновить смену
+              </Button>
+            )}
 
             <Button
               onClick={handleEndShift}
