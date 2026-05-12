@@ -54,6 +54,21 @@ serve(async (req) => {
 
     console.log(`Found ${activeShifts.length} active shifts to check`);
 
+    // Load per-(user, site) schedule overrides so we end each shift at THIS
+    // worker's expected_end, not just the site default. NULL override → fall
+    // back to site default.
+    const userIds = Array.from(new Set(activeShifts.map((s) => s.user_id)));
+    const siteIds = Array.from(new Set(activeShifts.map((s) => s.site_id)));
+    const { data: assignments } = await supabaseAdmin
+      .from('worker_site_assignments')
+      .select('user_id, site_id, expected_end')
+      .in('user_id', userIds)
+      .in('site_id', siteIds);
+    const overrideEndByPair = new Map<string, string | null>();
+    for (const a of (assignments || []) as Array<{ user_id: string; site_id: string; expected_end: string | null }>) {
+      overrideEndByPair.set(`${a.user_id}|${a.site_id}`, a.expected_end);
+    }
+
     let endedCount = 0;
     const now = new Date();
 
@@ -65,23 +80,29 @@ serve(async (req) => {
           continue;
         }
 
-        // Parse expected_end time (format: "HH:MM:SS" or "HH:MM")
-        const [endHours, endMinutes] = site.expected_end.split(':').map(Number);
+        // Effective expected_end = per-user override if set, else site default.
+        const overrideEnd = overrideEndByPair.get(`${shift.user_id}|${shift.site_id}`);
+        const effectiveExpectedEnd: string = overrideEnd ?? site.expected_end;
 
-        // Convert expected_end from site's local timezone to UTC.
-        // Strategy: get "now" as a local string in the site timezone,
-        // build a local Date with the expected_end hours, then compute
-        // the UTC equivalent via the timezone offset trick.
+        // Parse expected_end time (format: "HH:MM:SS" or "HH:MM")
+        const [endHours, endMinutes] = effectiveExpectedEnd.split(':').map(Number);
+
+        // Convert expected_end from site's local timezone to UTC, anchored to
+        // the shift's started_at date — NOT to "now". This is critical for
+        // overnight shifts: a shift starting at 22:00 with expected_end='02:00'
+        // ends at 02:00 the NEXT day, not 02:00 today.
         const siteTimezone = site.timezone || 'UTC';
-        // Represent "now" as if it were local time (but parsed as UTC)
-        const nowAsLocal = new Date(now.toLocaleString('en-US', { timeZone: siteTimezone }));
-        // The offset between real UTC and the site-local "fake UTC"
-        const tzOffsetMs = now.getTime() - nowAsLocal.getTime();
-        // Build the expected end at today's date in site-local coordinates
-        const expectedEndLocal = new Date(nowAsLocal);
+        const startedAt = new Date(shift.started_at);
+        const startAsLocal = new Date(startedAt.toLocaleString('en-US', { timeZone: siteTimezone }));
+        const tzOffsetMs = startedAt.getTime() - startAsLocal.getTime();
+        const expectedEndLocal = new Date(startAsLocal);
         expectedEndLocal.setHours(endHours, endMinutes, 0, 0);
-        // Convert back to real UTC
-        const expectedEndTime = new Date(expectedEndLocal.getTime() + tzOffsetMs);
+        let expectedEndTime = new Date(expectedEndLocal.getTime() + tzOffsetMs);
+        if (expectedEndTime.getTime() <= startedAt.getTime()) {
+          // expected_end falls earlier on the clock than started_at within the
+          // site's timezone → must be the next calendar day.
+          expectedEndTime = new Date(expectedEndTime.getTime() + 24 * 60 * 60 * 1000);
+        }
 
         // Check if current time is past expected_end
         if (now >= expectedEndTime) {
@@ -89,22 +110,38 @@ serve(async (req) => {
 
           // Calculate total paused minutes
           let totalPausedMinutes = shift.total_paused_minutes || 0;
-          let pauseHistory = shift.pause_history || [];
+          // Clone so we can safely mutate the last entry.
+          const pauseHistory: Array<Record<string, unknown>> = Array.isArray(shift.pause_history)
+            ? [...shift.pause_history]
+            : [];
 
-          // If shift is currently paused, close the pause
+          // If shift is currently paused, close the open pause entry in-place
+          // using the canonical format {paused_at, resumed_at, reason,
+          // duration_minutes}. Earlier this function appended a NEW entry
+          // using a different schema ({started_at, ended_at, ...}), which
+          // both duplicated data and broke "count of auto-pauses" stats.
           if (shift.is_paused && shift.paused_at) {
             const pauseStartTime = new Date(shift.paused_at);
             const pauseDuration = Math.floor((expectedEndTime.getTime() - pauseStartTime.getTime()) / 60000);
             totalPausedMinutes += pauseDuration;
 
-            pauseHistory = [
-              ...pauseHistory,
-              {
-                started_at: shift.paused_at,
-                ended_at: expectedEndTime.toISOString(),
+            const lastIdx = pauseHistory.length - 1;
+            const lastEntry = lastIdx >= 0 ? pauseHistory[lastIdx] : null;
+            if (lastEntry && !lastEntry.resumed_at) {
+              pauseHistory[lastIdx] = {
+                ...lastEntry,
+                resumed_at: expectedEndTime.toISOString(),
                 duration_minutes: pauseDuration,
-              },
-            ];
+              };
+            } else {
+              // No open entry to close → append a synthetic one (canonical fields).
+              pauseHistory.push({
+                paused_at: shift.paused_at,
+                resumed_at: expectedEndTime.toISOString(),
+                reason: 'auto',
+                duration_minutes: pauseDuration,
+              });
+            }
           }
 
           // Calculate minutes worked (from start to expected_end minus pauses)

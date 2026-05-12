@@ -21,6 +21,10 @@ export interface GroupedShift {
   auto_pauses: AutoPause[]; // Автопаузы между сменами
   auto_ended?: boolean;
   is_overtime?: boolean;
+  /** Сколько раз сотрудник выходил за радиус объекта (auto-pause события). */
+  out_of_radius_count: number;
+  /** Самое длительное отсутствие на месте в минутах (максимальная пауза). */
+  longest_absence_minutes: number;
 }
 
 export interface ShiftSegment {
@@ -108,20 +112,55 @@ export function groupShiftsByWorkerSiteDay(shifts: BaseShift[]): GroupedShift[] 
   return groups;
 }
 
+// Read a pause entry from either canonical {paused_at, resumed_at, reason} or
+// legacy {started_at, ended_at} schema, returning the "is this a radius exit?"
+// signal + the duration in minutes.
+function pauseSignals(entry: any): { isAutoRadiusExit: boolean; durationMinutes: number } {
+  const startedAt: string | undefined = entry?.paused_at ?? entry?.started_at;
+  const endedAt: string | undefined = entry?.resumed_at ?? entry?.ended_at;
+  // Legacy entries from auto-end-shifts had no `reason` — they were all auto.
+  const reason = entry?.reason === 'manual' ? 'manual' : 'auto';
+  const durationMinutes = typeof entry?.duration_minutes === 'number'
+    ? Math.max(0, entry.duration_minutes)
+    : (startedAt && endedAt
+        ? Math.max(0, differenceInMinutes(new Date(endedAt), new Date(startedAt)))
+        : 0);
+  return { isAutoRadiusExit: reason === 'auto', durationMinutes };
+}
+
+function summarizePauses(allPauses: any[]): { out_of_radius_count: number; longest_absence_minutes: number } {
+  let count = 0;
+  let longest = 0;
+  for (const entry of allPauses) {
+    // Skip the "synthetic" auto-pauses between segments (we mark them with
+    // a `auto: true` flag in createGroupedShift below) — those are computed
+    // separately as the gap BETWEEN shifts, not as in-shift radius exits.
+    if (entry && entry.auto === true) continue;
+    const { isAutoRadiusExit, durationMinutes } = pauseSignals(entry);
+    if (isAutoRadiusExit) count += 1;
+    if (durationMinutes > longest) longest = durationMinutes;
+  }
+  return { out_of_radius_count: count, longest_absence_minutes: longest };
+}
+
 function createGroupedShift(shifts: BaseShift[]): GroupedShift {
   // Если только одна смена - возвращаем её без изменений
   if (shifts.length === 1) {
     const shift = shifts[0];
+    const history = shift.pause_history || [];
+    const { out_of_radius_count, longest_absence_minutes } = summarizePauses(history);
     return {
       ...shift,
       shift_ids: [shift.id],
-      pause_history: shift.pause_history || [],
+      pause_history: history,
       total_paused_minutes: shift.total_paused_minutes || 0,
       is_grouped: false,
       shift_segments: [],
       auto_pauses: [],
       auto_ended: shift.auto_ended,
       is_overtime: shift.is_overtime,
+      out_of_radius_count,
+      longest_absence_minutes,
     };
   }
 
@@ -188,6 +227,15 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     total_paused_minutes: s.total_paused_minutes || 0,
   }));
 
+  const { out_of_radius_count, longest_absence_minutes } = summarizePauses(allPauses);
+  // The "auto-pause between segments" (worker stopped and restarted the shift)
+  // isn't a radius exit, but the gap can be long — fold it into the
+  // longest-absence metric so the discipline view doesn't miss it.
+  const longestWithGaps = autoPauses.reduce(
+    (acc, gap) => Math.max(acc, gap.duration_minutes),
+    longest_absence_minutes,
+  );
+
   return {
     id: firstShift.id,
     shift_ids: shifts.map(s => s.id),
@@ -209,5 +257,7 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     auto_pauses: autoPauses,
     auto_ended: lastShift.auto_ended,
     is_overtime: firstShift.is_overtime,
+    out_of_radius_count,
+    longest_absence_minutes: longestWithGaps,
   };
 }

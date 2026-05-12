@@ -197,6 +197,10 @@ export interface RadiusEvaluation {
  *
  * Use 'uncertain' to suppress automatic actions (auto-pause / auto-resume) so
  * the worker doesn't flicker between paused/unpaused on the radius edge.
+ *
+ * `accuracyCapM` is the upper bound for the buffer the function will apply.
+ * Set to 0 for "strict mode" (no buffer at all — the check uses raw distance).
+ * Default 60m matches a reasonable urban GPS accuracy.
  */
 export function evaluateRadius(
   userLat: number,
@@ -204,11 +208,12 @@ export function evaluateRadius(
   siteLat: number,
   siteLon: number,
   radiusM: number,
-  accuracyM: number
+  accuracyM: number,
+  accuracyCapM: number = 60
 ): RadiusEvaluation {
   const distance = getDistance(userLat, userLon, siteLat, siteLon);
-  // Clamp accuracy to something sane to avoid huge edge buffers (e.g. accuracy=2000)
-  const effectiveAccuracy = Math.max(0, Math.min(accuracyM ?? 0, 300));
+  const cap = Math.max(0, accuracyCapM);
+  const effectiveAccuracy = Math.max(0, Math.min(accuracyM ?? 0, cap));
 
   let verdict: RadiusVerdict;
   if (distance + effectiveAccuracy <= radiusM) {

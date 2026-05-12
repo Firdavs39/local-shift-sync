@@ -11,11 +11,16 @@ import { supabase } from '@/integrations/supabase/client';
 interface AppSettings {
   max_users: number;
   purge_policy_days: number;
+  accuracy_cap_m: number;
 }
 
 const Settings = () => {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState<AppSettings>({ max_users: 20, purge_policy_days: 365 });
+  const [settings, setSettings] = useState<AppSettings>({
+    max_users: 20,
+    purge_policy_days: 365,
+    accuracy_cap_m: 60,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -30,13 +35,18 @@ const Settings = () => {
 
         const { data, error } = await supabase
           .from('settings')
-          .select('max_users, purge_policy_days')
+          .select('max_users, purge_policy_days, accuracy_cap_m')
           .eq('id', cid)
           .single();
 
         if (error) throw error;
         if (data) {
-          setSettings({ max_users: data.max_users, purge_policy_days: data.purge_policy_days });
+          const row = data as { max_users: number; purge_policy_days: number; accuracy_cap_m?: number };
+          setSettings({
+            max_users: row.max_users,
+            purge_policy_days: row.purge_policy_days,
+            accuracy_cap_m: typeof row.accuracy_cap_m === 'number' ? row.accuracy_cap_m : 60,
+          });
         }
       } catch {
         toast.error('Ошибка загрузки настроек');
@@ -61,6 +71,7 @@ const Settings = () => {
         .update({
           max_users: settings.max_users,
           purge_policy_days: settings.purge_policy_days,
+          accuracy_cap_m: settings.accuracy_cap_m,
         })
         .eq('id', companyId);
 
@@ -122,6 +133,25 @@ const Settings = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Смены старше указанного количества дней будут автоматически удалены
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="accuracy_cap">Допуск GPS-погрешности (м)</Label>
+                <Input
+                  id="accuracy_cap"
+                  type="number"
+                  min={0}
+                  max={200}
+                  value={settings.accuracy_cap_m}
+                  onChange={(e) => setSettings({ ...settings, accuracy_cap_m: Math.max(0, Math.min(200, parseInt(e.target.value) || 0)) })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Насколько мягко система относится к GPS-погрешности. <b>0</b> — строгий
+                  режим: «внутри» только если фактическое расстояние ≤ радиуса.
+                  <b> 60</b> (по умолчанию) — терпимо к городской погрешности.
+                  Чем больше значение, тем чаще сотрудник засчитывается «внутри радиуса»
+                  при неточном сигнале.
                 </p>
               </div>
 

@@ -177,23 +177,46 @@ async function handleShifts(supabase: any, ctx: KeyContext, url: URL) {
   const { data, error } = await q;
   if (error) return errorResponse(error.message, 500, 'query_error');
 
+  // Resolve effective expected_start/end per (user, site): assignment override wins,
+  // otherwise the site default is used. Bot consumers expect the worker's
+  // ACTUAL schedule, not the site-wide default.
+  const userIds = Array.from(new Set((data ?? []).map((s: any) => s.user_id)));
+  const siteIds = Array.from(new Set((data ?? []).map((s: any) => s.site_id)));
+  let overrideMap = new Map<string, { expected_start: string | null; expected_end: string | null }>();
+  if (userIds.length > 0 && siteIds.length > 0) {
+    const { data: assignments } = await supabase
+      .from('worker_site_assignments')
+      .select('user_id, site_id, expected_start, expected_end')
+      .eq('company_id', ctx.company_id)
+      .in('user_id', userIds)
+      .in('site_id', siteIds);
+    for (const a of (assignments ?? []) as Array<{ user_id: string; site_id: string; expected_start: string | null; expected_end: string | null }>) {
+      overrideMap.set(`${a.user_id}|${a.site_id}`, { expected_start: a.expected_start, expected_end: a.expected_end });
+    }
+  }
+
   // PII filter: hide coordinates, format
-  const shifts = (data ?? []).map((s: any) => ({
-    id: s.id,
-    user_id: s.user_id,
-    full_name: s.profiles?.full_name,
-    site_id: s.site_id,
-    site_name: s.sites?.name,
-    site_timezone: s.sites?.timezone,
-    started_at: s.started_at,
-    ended_at: s.ended_at,
-    status: s.status,
-    minutes_late: s.minutes_late,
-    minutes_worked: s.minutes_worked,
-    total_paused_minutes: s.total_paused_minutes,
-    auto_ended: s.auto_ended,
-    is_overtime: s.is_overtime,
-  }));
+  const shifts = (data ?? []).map((s: any) => {
+    const override = overrideMap.get(`${s.user_id}|${s.site_id}`);
+    return {
+      id: s.id,
+      user_id: s.user_id,
+      full_name: s.profiles?.full_name,
+      site_id: s.site_id,
+      site_name: s.sites?.name,
+      site_timezone: s.sites?.timezone,
+      expected_start: override?.expected_start ?? s.sites?.expected_start,
+      expected_end: override?.expected_end ?? s.sites?.expected_end,
+      started_at: s.started_at,
+      ended_at: s.ended_at,
+      status: s.status,
+      minutes_late: s.minutes_late,
+      minutes_worked: s.minutes_worked,
+      total_paused_minutes: s.total_paused_minutes,
+      auto_ended: s.auto_ended,
+      is_overtime: s.is_overtime,
+    };
+  });
 
   return jsonResponse({ data: { shifts, count: shifts.length } });
 }

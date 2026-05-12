@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, RefreshCw, Users, Pause, TrendingUp, Download } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Users, Pause, TrendingUp, Download, Footprints, Repeat } from 'lucide-react';
 import { exportShiftsToCSV } from '@/lib/csv-export';
 import { formatTime, formatDate, calculateEarlyMinutes } from '@/lib/time';
+import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 import { toast } from 'sonner';
 import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
@@ -91,30 +92,51 @@ const Reports = () => {
         .select('id, full_name')
         .in('id', userIds);
 
-      // Load site names and expected start times
+      // Load site names + default expected times (we'll override per-(user, site) below).
       const siteIds = [...new Set(shiftsData?.map(s => s.site_id) || [])];
       const { data: sites } = await supabase
         .from('sites')
-        .select('id, name, expected_start')
+        .select('id, name, expected_start, expected_end')
         .in('id', siteIds);
 
+      // Load all (user, site) assignment overrides relevant to this batch.
+      // RLS limits admin to their company, so this is bounded.
+      const { data: assignmentRows } = await supabase
+        .from('worker_site_assignments')
+        .select('user_id, site_id, expected_start, expected_end')
+        .in('user_id', userIds)
+        .in('site_id', siteIds);
+      const assignmentMap = new Map<string, AssignmentOverride>();
+      for (const row of (assignmentRows as unknown as Array<{ user_id: string; site_id: string; expected_start: string | null; expected_end: string | null }>) || []) {
+        assignmentMap.set(`${row.user_id}|${row.site_id}`, {
+          expected_start: row.expected_start,
+          expected_end: row.expected_end,
+        });
+      }
+
       const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]));
-      const siteMap = new Map(sites?.map(s => [s.id, { name: s.name, expected_start: s.expected_start }]));
+      const siteMap = new Map(sites?.map(s => [s.id, { name: s.name, expected_start: s.expected_start, expected_end: s.expected_end }]));
 
       const enrichedShifts: ShiftReport[] = (shiftsData || [])
         .filter(shift => shift.status !== 'offsite') // Filter out old offsite shifts
         .map(shift => {
           const siteInfo = siteMap.get(shift.site_id);
-          const earlyMinutes = siteInfo?.expected_start 
-            ? calculateEarlyMinutes(new Date(shift.started_at), siteInfo.expected_start)
+          const effective = siteInfo
+            ? pickEffectiveTimes(
+                assignmentMap.get(`${shift.user_id}|${shift.site_id}`) || null,
+                { expected_start: siteInfo.expected_start, expected_end: siteInfo.expected_end },
+              )
+            : null;
+          const earlyMinutes = effective
+            ? calculateEarlyMinutes(new Date(shift.started_at), effective.start)
             : undefined;
-          
+
           return {
             ...shift,
             status: shift.status as 'early' | 'on_time' | 'late',
             user_name: profileMap.get(shift.user_id) || 'Неизвестно',
             site_name: siteInfo?.name || 'Неизвестно',
-            expected_start: siteInfo?.expected_start,
+            expected_start: effective?.start,
             early_minutes: earlyMinutes,
             pause_history: Array.isArray(shift.pause_history) ? shift.pause_history : [],
           };
@@ -219,6 +241,8 @@ const Reports = () => {
                           <TableHead>Опоздание</TableHead>
                           <TableHead>Раньше</TableHead>
                           <TableHead>Паузы</TableHead>
+                          <TableHead>Выходы за радиус</TableHead>
+                          <TableHead>Макс отсутствие</TableHead>
                           <TableHead>Отработано</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -283,6 +307,22 @@ const Reports = () => {
                                     </span>
                                   )}
                                 </div>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {shift.out_of_radius_count > 0 ? (
+                                <span className="text-orange-600 flex items-center gap-1">
+                                  <Repeat className="w-3 h-3" />
+                                  {shift.out_of_radius_count}
+                                </span>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {shift.longest_absence_minutes > 0 ? (
+                                <span className="text-orange-600 flex items-center gap-1">
+                                  <Footprints className="w-3 h-3" />
+                                  {shift.longest_absence_minutes} мин
+                                </span>
                               ) : '-'}
                             </TableCell>
                             <TableCell>

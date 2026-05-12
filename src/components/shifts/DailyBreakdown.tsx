@@ -1,7 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { ShiftCard } from './ShiftCard';
-import { formatDate } from '@/lib/time';
-import { Calendar, Clock, TrendingDown, TrendingUp } from 'lucide-react';
+import { Calendar, Clock, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
 
 interface PauseEvent {
   paused_at: string;
@@ -26,6 +25,9 @@ interface DayStats {
   workedMinutes: number;
   lateMinutes: number;
   earlyMinutes: number;
+  pausedMinutes?: number;
+  outOfRadiusCount?: number;
+  longestAbsenceMinutes?: number;
 }
 
 interface DailyBreakdownProps {
@@ -82,6 +84,26 @@ export function DailyBreakdown({ dailyBreakdown }: DailyBreakdownProps) {
                   <span className="text-muted-foreground">Раньше:</span>
                   <span className="font-medium text-blue-500">
                     {day.dayStats.earlyMinutes} мин
+                  </span>
+                </div>
+              )}
+
+              {day.dayStats.outOfRadiusCount !== undefined && day.dayStats.outOfRadiusCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <Repeat className="w-4 h-4 text-orange-500" />
+                  <span className="text-muted-foreground">Выходов за радиус:</span>
+                  <span className="font-medium text-orange-500">
+                    {day.dayStats.outOfRadiusCount}
+                  </span>
+                </div>
+              )}
+
+              {day.dayStats.longestAbsenceMinutes !== undefined && day.dayStats.longestAbsenceMinutes > 0 && (
+                <div className="flex items-center gap-2">
+                  <Footprints className="w-4 h-4 text-orange-500" />
+                  <span className="text-muted-foreground">Макс отсутствие:</span>
+                  <span className="font-medium text-orange-500">
+                    {day.dayStats.longestAbsenceMinutes} мин
                   </span>
                 </div>
               )}
