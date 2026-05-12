@@ -1,5 +1,5 @@
 -- ============================================================
--- MULTI-TENANCY MIGRATION FOR VEZIR GEOTIME
+-- MULTI-TENANCY MIGRATION FOR GEOTIME
 -- Выполнять в Supabase Dashboard → SQL Editor
 -- Выполняйте каждый блок ПОСЛЕДОВАТЕЛЬНО
 -- ============================================================

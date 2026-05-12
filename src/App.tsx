@@ -9,6 +9,7 @@ import Admin from "./pages/Admin";
 import SitesManagement from "./pages/SitesManagement";
 import UsersManagement from "./pages/UsersManagement";
 import Reports from "./pages/Reports";
+import WhoIsOnShift from "./pages/WhoIsOnShift";
 import WorkerDetails from "./pages/WorkerDetails";
 import MyShifts from "./pages/MyShifts";
 import Settings from "./pages/Settings";
@@ -64,6 +65,11 @@ function App() {
           <Route path="/admin/reports" element={
             <ProtectedRoute requireAdmin>
               <Reports />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/on-shift" element={
+            <ProtectedRoute requireAdmin>
+              <WhoIsOnShift />
             </ProtectedRoute>
           } />
           <Route path="/admin/workers/:id" element={

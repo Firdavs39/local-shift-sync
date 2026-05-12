@@ -4,7 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, MapPin, Plus, Trash2, Navigation, RefreshCw } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, MapPin, Plus, Trash2, Navigation, RefreshCw, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDistance, getCurrentPositionAccurate } from '@/lib/geo';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,10 +31,25 @@ interface Site {
   created_at: string;
 }
 
+interface WorkerOption {
+  id: string;
+  full_name: string;
+}
+
+interface Assignment {
+  id: string;
+  user_id: string;
+  site_id: string;
+  expected_start: string | null;
+  expected_end: string | null;
+  // joined
+  worker_name?: string;
+}
+
 const SitesManagement = () => {
   const navigate = useNavigate();
   const [sites, setSites] = useState<Site[]>([]);
-  
+
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -39,6 +63,16 @@ const SitesManagement = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
+
+  // Per-site assignments + workers list for the "manage workers" dialog.
+  const [assignmentsBySite, setAssignmentsBySite] = useState<Record<string, Assignment[]>>({});
+  const [workers, setWorkers] = useState<WorkerOption[]>([]);
+  const [assignDialogSite, setAssignDialogSite] = useState<Site | null>(null);
+  const [newAssignment, setNewAssignment] = useState({
+    userId: '',
+    expectedStart: '',
+    expectedEnd: '',
+  });
 
   // Helper: request geolocation with multi-sample accuracy and typed error reason
   const requestGeolocation = async (silent = false): Promise<{ lat: number; lon: number; accuracy?: number } | null> => {
@@ -125,14 +159,141 @@ const SitesManagement = () => {
       .from('sites')
       .select('*')
       .order('created_at', { ascending: false });
-    
+
     if (error) {
       console.error('Error loading sites:', error);
       toast.error('Ошибка загрузки объектов');
       return;
     }
-    
+
     setSites(data || []);
+    // After loading sites, refresh the per-site assignment map too.
+    loadAssignments();
+  };
+
+  const loadAssignments = async () => {
+    const { data, error } = await supabase
+      .from('worker_site_assignments')
+      .select('id, user_id, site_id, expected_start, expected_end');
+    if (error) {
+      console.error('Error loading assignments:', error);
+      return;
+    }
+    const rows = (data as unknown as Assignment[]) || [];
+    // Pull worker names in a single batch so the UI can render them.
+    const userIds = Array.from(new Set(rows.map(r => r.user_id)));
+    let nameMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      nameMap = new Map((profs || []).map(p => [p.id, p.full_name]));
+    }
+    const grouped: Record<string, Assignment[]> = {};
+    for (const a of rows) {
+      const enriched: Assignment = { ...a, worker_name: nameMap.get(a.user_id) ?? '—' };
+      if (!grouped[a.site_id]) grouped[a.site_id] = [];
+      grouped[a.site_id].push(enriched);
+    }
+    setAssignmentsBySite(grouped);
+  };
+
+  const loadWorkers = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, active')
+      .eq('active', true)
+      .order('full_name');
+    setWorkers(((data as unknown) as WorkerOption[]) || []);
+  };
+
+  const openAssignDialog = (site: Site) => {
+    setAssignDialogSite(site);
+    setNewAssignment({
+      userId: '',
+      expectedStart: site.expected_start,
+      expectedEnd: site.expected_end,
+    });
+    if (workers.length === 0) loadWorkers();
+  };
+
+  const closeAssignDialog = () => {
+    setAssignDialogSite(null);
+    setNewAssignment({ userId: '', expectedStart: '', expectedEnd: '' });
+  };
+
+  const handleAddAssignment = async () => {
+    if (!assignDialogSite) return;
+    if (!newAssignment.userId) {
+      toast.error('Выберите сотрудника');
+      return;
+    }
+    // Empty inputs map to NULL → site defaults are used.
+    const expectedStart = newAssignment.expectedStart || null;
+    const expectedEnd = newAssignment.expectedEnd || null;
+
+    const { data: companyId, error: companyErr } = await supabase.rpc('get_my_company_id');
+    if (companyErr || !companyId) {
+      toast.error('Не удалось определить компанию');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('worker_site_assignments')
+      .insert({
+        company_id: companyId,
+        user_id: newAssignment.userId,
+        site_id: assignDialogSite.id,
+        expected_start: expectedStart,
+        expected_end: expectedEnd,
+      });
+
+    if (error) {
+      if (error.code === '23505') {
+        toast.error('Этот сотрудник уже назначен. Измените существующее назначение.');
+      } else {
+        console.error('Error adding assignment:', error);
+        toast.error('Ошибка добавления назначения');
+      }
+      return;
+    }
+
+    toast.success('Сотрудник назначен');
+    setNewAssignment({
+      userId: '',
+      expectedStart: assignDialogSite.expected_start,
+      expectedEnd: assignDialogSite.expected_end,
+    });
+    loadAssignments();
+  };
+
+  const handleUpdateAssignment = async (assignmentId: string, expectedStart: string | null, expectedEnd: string | null) => {
+    const { error } = await supabase
+      .from('worker_site_assignments')
+      .update({ expected_start: expectedStart, expected_end: expectedEnd })
+      .eq('id', assignmentId);
+    if (error) {
+      console.error('Error updating assignment:', error);
+      toast.error('Ошибка обновления');
+      return;
+    }
+    toast.success('Назначение обновлено');
+    loadAssignments();
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    const { error } = await supabase
+      .from('worker_site_assignments')
+      .delete()
+      .eq('id', assignmentId);
+    if (error) {
+      console.error('Error deleting assignment:', error);
+      toast.error('Ошибка удаления назначения');
+      return;
+    }
+    toast.success('Назначение удалено');
+    loadAssignments();
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -377,6 +538,7 @@ const SitesManagement = () => {
             const distance = getDistanceToSite(site);
             const isNearby = distance !== null && distance <= site.radius_m;
 
+            const siteAssignments = assignmentsBySite[site.id] || [];
             return (
               <Card key={site.id} className="p-6">
                 <div className="flex items-start justify-between">
@@ -393,7 +555,7 @@ const SitesManagement = () => {
                     <div className="text-sm text-muted-foreground space-y-1">
                       <p>📍 {site.lat.toFixed(6)}, {site.lon.toFixed(6)}</p>
                       <p>⭕ Радиус: {site.radius_m}м</p>
-                      <p>🕒 {site.expected_start} - {site.expected_end}</p>
+                      <p>🕒 По умолчанию: {site.expected_start} - {site.expected_end}</p>
                     </div>
                   </div>
                   <Button
@@ -404,6 +566,44 @@ const SitesManagement = () => {
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
+                </div>
+
+                {/* Workers assigned to this site (with their individual schedules). */}
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Users className="w-4 h-4 text-primary" />
+                      Сотрудники: {siteAssignments.length}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => openAssignDialog(site)}>
+                      <Plus className="w-3 h-3 mr-1" />
+                      Управлять
+                    </Button>
+                  </div>
+                  {siteAssignments.length > 0 ? (
+                    <div className="space-y-1 text-xs">
+                      {siteAssignments.slice(0, 5).map((a) => {
+                        const start = a.expected_start ?? site.expected_start;
+                        const end = a.expected_end ?? site.expected_end;
+                        const isDefault = !a.expected_start && !a.expected_end;
+                        return (
+                          <div key={a.id} className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{a.worker_name}</span>
+                            <span className={isDefault ? 'text-muted-foreground' : ''}>
+                              {start}–{end}{isDefault && ' (по умолчанию)'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {siteAssignments.length > 5 && (
+                        <div className="text-muted-foreground">…и ещё {siteAssignments.length - 5}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Пока никто не назначен. Все активные сотрудники видят этот объект.
+                    </p>
+                  )}
                 </div>
               </Card>
             );
@@ -420,6 +620,113 @@ const SitesManagement = () => {
           )}
         </div>
       </main>
+
+      {/* Assignment management dialog */}
+      <Dialog open={!!assignDialogSite} onOpenChange={(open) => { if (!open) closeAssignDialog(); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Сотрудники на «{assignDialogSite?.name}»</DialogTitle>
+            <DialogDescription>
+              Назначайте сотрудников с индивидуальным графиком. Пустые поля времени = использовать
+              время по умолчанию ({assignDialogSite?.expected_start}–{assignDialogSite?.expected_end}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {(assignDialogSite ? assignmentsBySite[assignDialogSite.id] || [] : []).length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Никто пока не назначен на этот объект.
+              </p>
+            )}
+            {(assignDialogSite ? assignmentsBySite[assignDialogSite.id] || [] : []).map((a) => (
+              <div key={a.id} className="flex items-center gap-2 p-3 rounded-md border">
+                <div className="flex-1 text-sm font-medium">{a.worker_name}</div>
+                <Input
+                  type="time"
+                  value={a.expected_start ?? ''}
+                  placeholder={assignDialogSite?.expected_start}
+                  className="w-28"
+                  onBlur={(e) => {
+                    const v = e.target.value || null;
+                    if (v !== (a.expected_start ?? null)) {
+                      handleUpdateAssignment(a.id, v, a.expected_end);
+                    }
+                  }}
+                />
+                <Input
+                  type="time"
+                  value={a.expected_end ?? ''}
+                  placeholder={assignDialogSite?.expected_end}
+                  className="w-28"
+                  onBlur={(e) => {
+                    const v = e.target.value || null;
+                    if (v !== (a.expected_end ?? null)) {
+                      handleUpdateAssignment(a.id, a.expected_start, v);
+                    }
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDeleteAssignment(a.id)}
+                  className="text-destructive"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-4 border-t space-y-3">
+            <div className="text-sm font-medium">Добавить сотрудника</div>
+            <Select
+              value={newAssignment.userId}
+              onValueChange={(v) => setNewAssignment({ ...newAssignment, userId: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Выберите сотрудника" />
+              </SelectTrigger>
+              <SelectContent>
+                {workers
+                  .filter(w => {
+                    if (!assignDialogSite) return true;
+                    const taken = new Set((assignmentsBySite[assignDialogSite.id] || []).map(a => a.user_id));
+                    return !taken.has(w.id);
+                  })
+                  .map(w => (
+                    <SelectItem key={w.id} value={w.id}>{w.full_name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Начало</Label>
+                <Input
+                  type="time"
+                  value={newAssignment.expectedStart}
+                  onChange={(e) => setNewAssignment({ ...newAssignment, expectedStart: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Конец</Label>
+                <Input
+                  type="time"
+                  value={newAssignment.expectedEnd}
+                  onChange={(e) => setNewAssignment({ ...newAssignment, expectedEnd: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeAssignDialog}>Закрыть</Button>
+            <Button onClick={handleAddAssignment} disabled={!newAssignment.userId}>
+              <Plus className="w-4 h-4 mr-1" />
+              Назначить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

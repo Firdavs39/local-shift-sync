@@ -10,6 +10,8 @@ import { PeriodStats } from '@/components/shifts/PeriodStats';
 import { DailyBreakdown } from '@/components/shifts/DailyBreakdown';
 import { calculateEarlyMinutes, formatDate } from '@/lib/time';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { computeDayStats } from '@/lib/discipline';
+import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 
 type PeriodType = 'day' | 'week' | 'month';
 
@@ -38,6 +40,9 @@ interface DayStats {
   workedMinutes: number;
   lateMinutes: number;
   earlyMinutes: number;
+  pausedMinutes: number;
+  outOfRadiusCount: number;
+  longestAbsenceMinutes: number;
 }
 
 const MyShifts = () => {
@@ -123,6 +128,17 @@ const MyShifts = () => {
         return;
       }
 
+      // Load this worker's per-site schedule overrides once. We look these up
+      // per-shift below via assignmentMap[site_id].
+      const { data: assignmentRows } = await supabase
+        .from('worker_site_assignments')
+        .select('site_id, expected_start, expected_end')
+        .eq('user_id', user.id);
+      const assignmentMap = new Map<string, AssignmentOverride>();
+      for (const row of (assignmentRows as unknown as Array<{ site_id: string; expected_start: string | null; expected_end: string | null }>) || []) {
+        assignmentMap.set(row.site_id, { expected_start: row.expected_start, expected_end: row.expected_end });
+      }
+
       // Process shifts to add computed fields
       const processedShifts: ShiftWithDetails[] = (data || []).map((shift: any) => {
         const pauseHistory = Array.isArray(shift.pause_history) ? shift.pause_history : [];
@@ -140,8 +156,13 @@ const MyShifts = () => {
           return pause;
         });
 
+        const effective = pickEffectiveTimes(
+          assignmentMap.get(shift.site_id) || null,
+          { expected_start: shift.sites.expected_start, expected_end: shift.sites.expected_end },
+        );
+
         const earlyMinutes = shift.status === 'early' || shift.status === 'on_time'
-          ? calculateEarlyMinutes(new Date(shift.started_at), shift.sites.expected_start)
+          ? calculateEarlyMinutes(new Date(shift.started_at), effective.start)
           : 0;
 
         return {
@@ -156,7 +177,7 @@ const MyShifts = () => {
           total_paused_minutes: shift.total_paused_minutes || 0,
           early_minutes: earlyMinutes,
           pause_events: pauseEvents,
-          expected_start: shift.sites.expected_start,
+          expected_start: effective.start,
         };
       });
 
@@ -199,10 +220,30 @@ const MyShifts = () => {
     });
 
     return Array.from(grouped.entries()).map(([date, dayShifts]) => {
+      // Anchor lateness/early to the day's first shift via computeDayStats,
+      // so that restarting the shift mid-day doesn't reset the discipline
+      // metrics. All shifts in the bucket share the same expected_start
+      // because they're on the same site (different sites get separate buckets).
+      const expectedStart = dayShifts[0]?.expected_start;
+      const stats = computeDayStats(
+        dayShifts.map(s => ({
+          id: s.id,
+          started_at: s.started_at,
+          ended_at: s.ended_at,
+          minutes_worked: s.minutes_worked ?? null,
+          total_paused_minutes: s.total_paused_minutes ?? null,
+          pause_history: s.pause_events,
+        })),
+        expectedStart ? { start: expectedStart } : null,
+      );
+
       const dayStats: DayStats = {
-        workedMinutes: dayShifts.reduce((sum, s) => sum + (s.minutes_worked || 0), 0),
-        lateMinutes: dayShifts.reduce((sum, s) => sum + s.minutes_late, 0),
-        earlyMinutes: dayShifts.reduce((sum, s) => sum + (s.early_minutes || 0), 0),
+        workedMinutes: stats.totalWorkedMinutes,
+        lateMinutes: stats.minutesLate,
+        earlyMinutes: stats.earlyMinutes,
+        pausedMinutes: stats.totalPausedMinutes,
+        outOfRadiusCount: stats.outOfRadiusCount,
+        longestAbsenceMinutes: stats.longestAbsenceMinutes,
       };
 
       return {

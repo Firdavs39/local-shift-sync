@@ -32,6 +32,8 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
     'Опоздание (мин)',
     'Пришёл раньше (мин)',
     'Паузы (мин)',
+    'Выходы за радиус',
+    'Самое длинное отсутствие (мин)',
     'Отработано (мин)',
     'Отработано (ч:мм)',
   ];
@@ -54,6 +56,8 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
       escapeCSV(shift.minutes_late > 0 ? shift.minutes_late : 0),
       escapeCSV(shift.early_minutes && shift.early_minutes > 0 ? shift.early_minutes : 0),
       escapeCSV(shift.total_paused_minutes ?? 0),
+      escapeCSV(shift.out_of_radius_count ?? 0),
+      escapeCSV(shift.longest_absence_minutes ?? 0),
       escapeCSV(shift.minutes_worked ?? ''),
       escapeCSV(workedH),
     ].join(',');

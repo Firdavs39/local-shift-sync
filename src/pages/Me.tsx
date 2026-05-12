@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance } from '@/lib/geo';
-import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate } from '@/lib/time';
-import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle } from 'lucide-react';
+import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance, type RadiusEvaluation } from '@/lib/geo';
+import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate, isAfterExpected } from '@/lib/time';
+import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
+import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
+import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle, CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Site {
@@ -54,6 +56,11 @@ const Me = () => {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [accuracyCapM, setAccuracyCapM] = useState<number>(60);
+  const [todayShifts, setTodayShifts] = useState<Shift[]>([]);
+  const [isFirstOfDay, setIsFirstOfDay] = useState<boolean>(false);
+  /** site_id → assignment override (if any). Missing key = use site defaults. */
+  const [myAssignments, setMyAssignments] = useState<Record<string, AssignmentOverride>>({});
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -72,15 +79,48 @@ const Me = () => {
     return () => clearInterval(timer);
   }, [navigate]);
 
+  // Load TODAY's shifts (all of them, for the bucketed "today" stats block).
+  // Lateness/early/absence accumulate across restarts → we need every row.
+  const refreshTodayShifts = async () => {
+    if (!user) return;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const { data } = await supabase
+      .from('shifts')
+      .select('*')
+      .eq('user_id', user.id)
+      .gte('started_at', startOfToday.toISOString())
+      .order('started_at', { ascending: true });
+    setTodayShifts((data as Shift[]) || []);
+  };
+
+  // RPC: is the current user the first shift-starter in their company today?
+  const refreshIsFirstOfDay = async () => {
+    if (!user) return;
+    const { data } = await supabase.rpc('am_i_first_today');
+    setIsFirstOfDay(Boolean(data));
+  };
+
   useEffect(() => {
     if (!user) return;
 
-    // Load sites
+    // Load sites visible to this worker:
+    //   - If they have ANY assignment → only show sites they're assigned to.
+    //   - If they have NO assignments → show all active sites (soft rollout,
+    //     mirrors the pre-assignments behaviour so existing workers keep
+    //     working until an admin sets up their schedule).
     const loadSites = async () => {
-      const { data, error } = await supabase
-        .from('sites')
-        .select('*')
-        .eq('active', true);
+      const { data: assignmentRows } = await supabase
+        .from('worker_site_assignments')
+        .select('site_id')
+        .eq('user_id', user.id);
+      const assignedSiteIds = ((assignmentRows as unknown) as Array<{ site_id: string }> | null)?.map(r => r.site_id) ?? [];
+
+      let query = supabase.from('sites').select('*').eq('active', true);
+      if (assignedSiteIds.length > 0) {
+        query = query.in('id', assignedSiteIds);
+      }
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error loading sites:', error);
@@ -89,6 +129,40 @@ const Me = () => {
         setSites(data || []);
       }
     };
+
+    // Load company-level accuracy cap (used to tune evaluateRadius).
+    // Worker can SELECT from settings via RLS in their own company.
+    const loadAccuracyCap = async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('accuracy_cap_m')
+        .limit(1)
+        .maybeSingle();
+      if (data && typeof (data as { accuracy_cap_m?: number }).accuracy_cap_m === 'number') {
+        setAccuracyCapM((data as { accuracy_cap_m: number }).accuracy_cap_m);
+      }
+    };
+    loadAccuracyCap();
+
+    // Load this worker's per-site schedule overrides. NULL fields mean
+    // "use site default" — pickEffectiveTimes() handles the fallback.
+    const loadMyAssignments = async () => {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('worker_site_assignments')
+        .select('site_id, expected_start, expected_end')
+        .eq('user_id', user.id);
+      if (error) {
+        console.error('Error loading assignments:', error);
+        return;
+      }
+      const map: Record<string, AssignmentOverride> = {};
+      for (const row of (data as unknown as Array<{ site_id: string; expected_start: string | null; expected_end: string | null }>) || []) {
+        map[row.site_id] = { expected_start: row.expected_start, expected_end: row.expected_end };
+      }
+      setMyAssignments(map);
+    };
+    loadMyAssignments();
 
     // Load active shift
     const loadActiveShift = async () => {
@@ -107,6 +181,9 @@ const Me = () => {
       }
     };
 
+    const loadTodayShifts = refreshTodayShifts;
+    const loadIsFirstOfDay = refreshIsFirstOfDay;
+
     // Get current location with multi-sample accuracy improvement
     getCurrentPositionAccurate({ targetAccuracyM: 50, maxSamples: 3, timeoutMs: 12000 })
       .then(pos => {
@@ -123,6 +200,8 @@ const Me = () => {
 
     loadSites();
     loadActiveShift();
+    loadTodayShifts();
+    loadIsFirstOfDay();
 
     // Set up real-time subscription for shifts
     const channel = supabase
@@ -137,7 +216,7 @@ const Me = () => {
         },
         (payload) => {
           const updatedShift = payload.new as Shift;
-          
+
           // Show notification if shift was auto-ended
           if (updatedShift.auto_ended && updatedShift.ended_at) {
             const minutesWorked = updatedShift.minutes_worked || 0;
@@ -146,8 +225,9 @@ const Me = () => {
               duration: 10000,
             });
           }
-          
+
           loadActiveShift();
+          loadTodayShifts();
         }
       )
       .subscribe();
@@ -189,7 +269,7 @@ const Me = () => {
           return;
         }
 
-        const evaluation = evaluateRadius(pos.lat, pos.lon, site.lat, site.lon, site.radius_m, pos.accuracy);
+        const evaluation = evaluateRadius(pos.lat, pos.lon, site.lat, site.lon, site.radius_m, pos.accuracy, accuracyCapM);
         const pauseReason = getCurrentPauseReason(activeShift);
 
         // 'uncertain' = sitting on the radius edge → don't toggle pause state (anti-flicker)
@@ -231,6 +311,7 @@ const Me = () => {
             const pausedAt = new Date(activeShift.paused_at!);
             const pausedMinutes = Math.max(0, Math.floor((now.getTime() - pausedAt.getTime()) / 60000));
             lastPause.resumed_at = now.toISOString();
+            lastPause.duration_minutes = pausedMinutes;
 
             const { error } = await supabase
               .from('shifts')
@@ -260,7 +341,7 @@ const Me = () => {
     monitorLocation();
 
     return () => clearInterval(interval);
-  }, [activeShift, sites]);
+  }, [activeShift, sites, accuracyCapM]);
 
   // Manual pause: user presses "Пауза"
   const handlePauseShift = async () => {
@@ -303,6 +384,7 @@ const Me = () => {
     const pausedAt = new Date(activeShift.paused_at!);
     const pausedMinutes = Math.max(0, Math.floor((now.getTime() - pausedAt.getTime()) / 60000));
     lastPause.resumed_at = now.toISOString();
+    lastPause.duration_minutes = pausedMinutes;
     pauseHistory[lastIndex] = lastPause;
 
     const { error } = await supabase
@@ -374,7 +456,7 @@ const Me = () => {
       }
 
       // Accuracy-aware radius check — refuses if we're not definitely inside
-      const evaluation = evaluateRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m, accuracy);
+      const evaluation = evaluateRadius(latitude, longitude, selectedSite.lat, selectedSite.lon, selectedSite.radius_m, accuracy, accuracyCapM);
 
       if (evaluation.verdict === 'outside') {
         toast.error(`Вы вне радиуса объекта. Расстояние: ${Math.round(evaluation.distance)}м (допустимо: ${selectedSite.radius_m}м, погрешность GPS ±${Math.round(accuracy)}м)`);
@@ -387,49 +469,38 @@ const Me = () => {
       }
 
       const now = new Date();
-      
-      // Parse expected_end time
-      const [endHours, endMinutes] = selectedSite.expected_end.split(':').map(Number);
-      const expectedEndTime = new Date(now);
-      expectedEndTime.setHours(endHours, endMinutes, 0, 0);
-      
-      // Check if starting after expected_end (overtime)
-      const isAfterExpectedEnd = now > expectedEndTime;
-      
-      // Check if user already has shifts today on this site
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      
-      const { data: todayShifts } = await supabase
-        .from('shifts')
-        .select('id, is_overtime')
-        .eq('user_id', user.id)
-        .eq('site_id', selectedSite.id)
-        .gte('started_at', startOfToday.toISOString());
-      
-      const isFirstShiftToday = !todayShifts || todayShifts.length === 0;
-      
+      const siteTz = selectedSite.timezone || 'UTC';
+
+      // Resolve EFFECTIVE expected times: assignment override → site default.
+      const effective = pickEffectiveTimes(
+        myAssignments[selectedSite.id],
+        { expected_start: selectedSite.expected_start, expected_end: selectedSite.expected_end, timezone: siteTz },
+      );
+
+      // Compare against expected_end in the SITE's timezone (not the browser's),
+      // so a worker in a different tz than the site gets the same verdict as
+      // the server-side auto-end-shifts function.
+      const isAfterExpectedEnd = isAfterExpected(now, effective.end, siteTz);
+
       let status: 'early' | 'on_time' | 'late' | 'offsite';
       let minutesLate = 0;
       let isOvertime = false;
-      
+
       if (isAfterExpectedEnd) {
         // After expected_end - this is overtime
         isOvertime = true;
         status = 'on_time';
         minutesLate = 0;
-        
+
         toast.info('⚡ Начата сверхурочная смена (переработка)', {
-          description: `Смена начата после ${selectedSite.expected_end}`,
+          description: `Смена начата после ${effective.end}`,
         });
-      } else if (isFirstShiftToday) {
-        // First shift of the day within working hours
-        status = getShiftStatus(now, selectedSite.expected_start, true);
-        minutesLate = status === 'late' ? getMinutesLate(now, selectedSite.expected_start) : 0;
       } else {
-        // Repeat shift within working hours (before expected_end)
-        status = 'on_time';
-        minutesLate = 0;
+        // Within working hours — always score against expected_start, even on
+        // the 2nd/3rd shift of the day. Discipline metrics must not reset just
+        // because the worker stopped and restarted.
+        status = getShiftStatus(now, effective.start, true, siteTz);
+        minutesLate = status === 'late' ? getMinutesLate(now, effective.start, siteTz) : 0;
       }
 
       const { data, error } = await supabase
@@ -456,6 +527,8 @@ const Me = () => {
         setActiveShift(data);
         setSelectedSite(null);
         toast.success(`Смена начата на объекте "${selectedSite.name}"${isOvertime ? ' (переработка)' : ''}`);
+        refreshTodayShifts();
+        refreshIsFirstOfDay();
       }
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
@@ -484,7 +557,7 @@ const Me = () => {
       }
 
       // Accuracy-aware check
-      const evaluation = evaluateRadius(latitude, longitude, site.lat, site.lon, site.radius_m, accuracy);
+      const evaluation = evaluateRadius(latitude, longitude, site.lat, site.lon, site.radius_m, accuracy, accuracyCapM);
 
       if (evaluation.verdict === 'outside') {
         toast.error(`Нельзя завершить смену вне радиуса объекта. Расстояние: ${Math.round(evaluation.distance)}м (допустимо: ${site.radius_m}м)`);
@@ -521,6 +594,7 @@ const Me = () => {
       } else {
         setActiveShift(null);
         toast.success(`Смена завершена. Отработано: ${Math.floor(minutesWorked / 60)}ч ${minutesWorked % 60}м`);
+        refreshTodayShifts();
       }
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
@@ -541,6 +615,28 @@ const Me = () => {
     const distance = getDistance(userLocation.lat, userLocation.lon, site.lat, site.lon);
     return Math.round(distance);
   };
+
+  // Verdict for a site given the worker's last known position. Returns null
+  // until GPS gives us something to evaluate. Used both for the big radius
+  // banner and for the mini coloured dots in the site list.
+  const evaluateSiteForUser = (site: Site): RadiusEvaluation | null => {
+    if (!userLocation) return null;
+    return evaluateRadius(
+      userLocation.lat,
+      userLocation.lon,
+      site.lat,
+      site.lon,
+      site.radius_m,
+      userLocation.accuracy ?? 0,
+      accuracyCapM,
+    );
+  };
+
+  // The site whose radius status we want to surface front-and-center:
+  // the active shift's site if any, otherwise the one the worker is selecting.
+  const focusedSite: Site | null =
+    (activeShift ? sites.find(s => s.id === activeShift.site_id) ?? null : null) || selectedSite;
+  const focusedEvaluation = focusedSite ? evaluateSiteForUser(focusedSite) : null;
 
   if (!user) return null;
 
@@ -600,6 +696,61 @@ const Me = () => {
           )}
         </Card>
 
+        {/* Big radius status banner — only when we have a focused site + GPS */}
+        {focusedSite && focusedEvaluation && (() => {
+          const distM = Math.round(focusedEvaluation.distance);
+          const accM = Math.round(focusedEvaluation.accuracy);
+          if (focusedEvaluation.verdict === 'inside') {
+            return (
+              <Card className="p-4 border-2 border-green-500 bg-green-500/10">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 shrink-0" />
+                  <div>
+                    <div className="font-semibold text-green-700 dark:text-green-400">
+                      Внутри радиуса — {distM} м
+                    </div>
+                    <div className="text-xs text-green-700/70 dark:text-green-400/70">
+                      Объект «{focusedSite.name}», радиус {focusedSite.radius_m} м
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          }
+          if (focusedEvaluation.verdict === 'outside') {
+            return (
+              <Card className="p-4 border-2 border-red-500 bg-red-500/10">
+                <div className="flex items-center gap-3">
+                  <XCircle className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0" />
+                  <div>
+                    <div className="font-semibold text-red-700 dark:text-red-400">
+                      Вне радиуса — {distM} м
+                    </div>
+                    <div className="text-xs text-red-700/70 dark:text-red-400/70">
+                      Объект «{focusedSite.name}», радиус {focusedSite.radius_m} м
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          }
+          return (
+            <Card className="p-4 border-2 border-yellow-500 bg-yellow-500/10">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-500 shrink-0" />
+                <div>
+                  <div className="font-semibold text-yellow-700 dark:text-yellow-500">
+                    На границе — {distM} м ±{accM} м
+                  </div>
+                  <div className="text-xs text-yellow-700/70 dark:text-yellow-500/70">
+                    Подойди ближе к центру — GPS на границе радиуса {focusedSite.radius_m} м
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })()}
+
         {/* My Shifts Button */}
         <Button
           onClick={() => navigate('/me/shifts')}
@@ -610,6 +761,88 @@ const Me = () => {
           <History className="w-5 h-5 mr-2" />
           Мои смены
         </Button>
+
+        {/* "Today" discipline summary — pinned to whichever site the worker is
+            currently on (active shift) or last started today. Survives shift
+            restarts: lateness anchors to the FIRST start of the day. */}
+        {(() => {
+          if (todayShifts.length === 0) return null;
+          const focusSiteId = activeShift?.site_id || todayShifts[todayShifts.length - 1].site_id;
+          const bucket = todayShifts.filter(s => s.site_id === focusSiteId);
+          if (bucket.length === 0) return null;
+          const site = sites.find(s => s.id === focusSiteId);
+          const effective = site
+            ? pickEffectiveTimes(
+                myAssignments[focusSiteId],
+                { expected_start: site.expected_start, expected_end: site.expected_end, timezone: site.timezone },
+              )
+            : null;
+          const stats = computeDayStats(
+            bucket.map((s): ShiftForStats => ({
+              id: s.id,
+              started_at: s.started_at,
+              ended_at: s.ended_at ?? null,
+              minutes_worked: s.minutes_worked ?? null,
+              total_paused_minutes: s.total_paused_minutes ?? null,
+              pause_history: (s.pause_history as ShiftForStats['pause_history']) ?? null,
+              is_overtime: s.is_overtime ?? null,
+              minutes_late: s.minutes_late ?? null,
+              status: s.status,
+            })),
+            effective ? { start: effective.start, timezone: site?.timezone } : null,
+          );
+          const hasAnything =
+            isFirstOfDay ||
+            stats.minutesLate > 0 ||
+            stats.earlyMinutes > 0 ||
+            stats.totalPausedMinutes > 0 ||
+            stats.outOfRadiusCount > 0;
+          if (!hasAnything) return null;
+          return (
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Сегодня</h3>
+                {site && (
+                  <span className="text-xs text-muted-foreground">{site.name}</span>
+                )}
+              </div>
+              {isFirstOfDay && (
+                <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
+                  <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-500" />
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                    🎉 Первый на смене сегодня
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                {stats.minutesLate > 0 && (
+                  <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <TrendingDown className="w-4 h-4" />
+                    <span>Опоздание: <b>{stats.minutesLate} мин</b></span>
+                  </div>
+                )}
+                {stats.earlyMinutes > 0 && (
+                  <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                    <TrendingUp className="w-4 h-4" />
+                    <span>Раньше на <b>{stats.earlyMinutes} мин</b></span>
+                  </div>
+                )}
+                {stats.totalPausedMinutes > 0 && (
+                  <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
+                    <Footprints className="w-4 h-4" />
+                    <span>Отсутствовал: <b>{stats.totalPausedMinutes} мин</b></span>
+                  </div>
+                )}
+                {stats.outOfRadiusCount > 0 && (
+                  <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
+                    <Repeat className="w-4 h-4" />
+                    <span>Выходов за радиус: <b>{stats.outOfRadiusCount}</b></span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* Shift Control */}
         {activeShift ? (
@@ -713,27 +946,51 @@ const Me = () => {
                   {sites.map((site) => {
                     const distance = getSiteDistance(site);
                     const isSelected = selectedSite?.id === site.id;
+                    const evaluation = evaluateSiteForUser(site);
+                    const effective = pickEffectiveTimes(
+                      myAssignments[site.id],
+                      { expected_start: site.expected_start, expected_end: site.expected_end },
+                    );
+                    const dotClass =
+                      evaluation?.verdict === 'inside' ? 'bg-green-500' :
+                      evaluation?.verdict === 'outside' ? 'bg-red-500' :
+                      evaluation?.verdict === 'uncertain' ? 'bg-yellow-500' :
+                      'bg-muted-foreground/40';
                     return (
                       <button
                         key={site.id}
                         onClick={() => setSelectedSite(site)}
                         className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                          isSelected 
-                            ? 'border-primary bg-primary/10' 
+                          isSelected
+                            ? 'border-primary bg-primary/10'
                             : 'border-border hover:border-primary/50 bg-card'
                         }`}
                       >
                         <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-medium">{site.name}</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Время: {site.expected_start} - {site.expected_end}
-                            </div>
-                            {distance !== null && (
+                          <div className="flex items-start gap-2 min-w-0">
+                            <span
+                              className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${dotClass}`}
+                              aria-label={
+                                evaluation?.verdict === 'inside' ? 'Внутри радиуса' :
+                                evaluation?.verdict === 'outside' ? 'Вне радиуса' :
+                                evaluation?.verdict === 'uncertain' ? 'На границе радиуса' :
+                                'Расстояние неизвестно'
+                              }
+                            />
+                            <div className="min-w-0">
+                              <div className="font-medium">{site.name}</div>
                               <div className="text-xs text-muted-foreground mt-1">
-                                📍 {distance}м от вас
+                                Время: {effective.start} - {effective.end}
+                                {effective.source !== 'site_default' && (
+                                  <span className="ml-1 text-primary">(ваш график)</span>
+                                )}
                               </div>
-                            )}
+                              {distance !== null && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  📍 {distance}м от вас
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div className="text-xs text-muted-foreground">
                             ±{site.radius_m}м

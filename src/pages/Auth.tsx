@@ -91,7 +91,7 @@ const Auth = () => {
               <Input
                 id="company"
                 type="text"
-                placeholder="vezir или название компании"
+                placeholder="код вашей компании"
                 value={companySlug}
                 onChange={(e) => setCompanySlug(e.target.value.toLowerCase().trim())}
                 className="pl-10"
