@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance, type RadiusEvaluation } from '@/lib/geo';
-import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate, isAfterExpected } from '@/lib/time';
+import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz } from '@/lib/time';
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
 import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle, CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
@@ -81,23 +81,42 @@ const Me = () => {
 
   // Load TODAY's shifts (all of them, for the bucketed "today" stats block).
   // Lateness/early/absence accumulate across restarts → we need every row.
+  // "Today" is interpreted in the timezone of the focused site (active shift's
+  // site, otherwise selected site), so a worker in Tashkent starting a shift
+  // at 23:00 local sees only TODAY's shifts (Tashkent calendar day), not
+  // shifts from yesterday's UTC date or the browser's local date.
   const refreshTodayShifts = async () => {
     if (!user) return;
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    // We may not know which site the worker will choose; the safest "today"
+    // window is the EARLIEST midnight across known site timezones. That way
+    // we never miss a shift on the boundary. Final bucketing into per-site
+    // "today" happens in the discipline block UI.
+    const candidateTzs = sites.map(s => s.timezone).filter(Boolean);
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tzs = candidateTzs.length > 0 ? candidateTzs : [browserTz];
+    const earliestMidnight = tzs
+      .map(tz => getDayStartInTz(new Date(), tz).getTime())
+      .reduce((a, b) => Math.min(a, b));
     const { data } = await supabase
       .from('shifts')
       .select('*')
       .eq('user_id', user.id)
-      .gte('started_at', startOfToday.toISOString())
+      .gte('started_at', new Date(earliestMidnight).toISOString())
       .order('started_at', { ascending: true });
     setTodayShifts((data as Shift[]) || []);
   };
 
   // RPC: is the current user the first shift-starter in their company today?
+  // "Today" is interpreted in the timezone of the worker's focus site (active
+  // shift's site → selected site → browser timezone fallback). This matches
+  // how the "Today" block buckets shifts.
   const refreshIsFirstOfDay = async () => {
     if (!user) return;
-    const { data } = await supabase.rpc('am_i_first_today');
+    const focusSite = activeShift
+      ? sites.find(s => s.id === activeShift.site_id)
+      : selectedSite;
+    const tz = focusSite?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const { data } = await supabase.rpc('am_i_first_today', { tz });
     setIsFirstOfDay(Boolean(data));
   };
 
@@ -768,9 +787,15 @@ const Me = () => {
         {(() => {
           if (todayShifts.length === 0) return null;
           const focusSiteId = activeShift?.site_id || todayShifts[todayShifts.length - 1].site_id;
-          const bucket = todayShifts.filter(s => s.site_id === focusSiteId);
-          if (bucket.length === 0) return null;
           const site = sites.find(s => s.id === focusSiteId);
+          // Filter to shifts from "today" in the SITE's timezone, not browser local.
+          // Worker can have two shifts at 23:30 and 01:30 local — those are
+          // different days in the site's tz and shouldn't share a bucket.
+          const todayKey = getDayKeyInTz(new Date(), site?.timezone);
+          const bucket = todayShifts.filter(
+            s => s.site_id === focusSiteId && getDayKeyInTz(new Date(s.started_at), site?.timezone) === todayKey,
+          );
+          if (bucket.length === 0) return null;
           const effective = site
             ? pickEffectiveTimes(
                 myAssignments[focusSiteId],
@@ -876,7 +901,12 @@ const Me = () => {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Начало:</span>
-                <span className="font-medium">{formatTime(new Date(activeShift.started_at))}</span>
+                <span className="font-medium">
+                  {formatTimeInTz(
+                    new Date(activeShift.started_at),
+                    sites.find(s => s.id === activeShift.site_id)?.timezone ?? null,
+                  )}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Статус:</span>

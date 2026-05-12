@@ -15,7 +15,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { formatTime } from '@/lib/time';
+import { formatTimeInTz, getDayKeyInTz, getDayStartInTz } from '@/lib/time';
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
 import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 
@@ -62,6 +62,8 @@ interface WorkerOnSite {
   fullName: string;
   effectiveStart: string;
   effectiveEnd: string;
+  /** IANA tz of the site this worker belongs to, for timestamp formatting. */
+  siteTimezone: string | null;
   shifts: ShiftRow[];
   stats: ReturnType<typeof computeDayStats>;
   /** Has any shift today on this site (started already). */
@@ -70,11 +72,21 @@ interface WorkerOnSite {
   activeShift: ShiftRow | null;
 }
 
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+/**
+ * Earliest "midnight" across all known site timezones. Used as the lower
+ * bound when pulling today's shifts — guarantees no site loses a row near
+ * its day boundary regardless of where the admin's browser is located.
+ */
+function earliestSiteMidnight(siteTzs: string[]): Date {
+  if (siteTzs.length === 0) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  const now = new Date();
+  const ts = siteTzs.map(tz => getDayStartInTz(now, tz).getTime());
+  return new Date(Math.min(...ts));
+}
 
 const WhoIsOnShift = () => {
   const navigate = useNavigate();
@@ -87,9 +99,20 @@ const WhoIsOnShift = () => {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const todayStart = startOfToday().toISOString();
-      const [sitesRes, profilesRes, assignmentsRes, shiftsRes] = await Promise.all([
-        supabase.from('sites').select('id, name, expected_start, expected_end, timezone, active').eq('active', true),
+      // Step 1: fetch sites first so we know which tzs span "today".
+      const sitesRes = await supabase
+        .from('sites').select('id, name, expected_start, expected_end, timezone, active').eq('active', true);
+      const sitesData = (sitesRes.data as SiteRow[]) || [];
+      setSites(sitesData);
+
+      // Step 2: query lower bound = earliest "today" midnight across all
+      // site timezones. Per-site filtering happens in the sitesWithWorkers
+      // memo below (we keep only rows whose started_at falls into "today"
+      // in their own site's tz).
+      const siteTzs = sitesData.map(s => s.timezone).filter(Boolean) as string[];
+      const lowerBound = earliestSiteMidnight(siteTzs).toISOString();
+
+      const [profilesRes, assignmentsRes, shiftsRes] = await Promise.all([
         supabase.from('profiles').select('id, full_name, active'),
         supabase
           .from('worker_site_assignments')
@@ -97,9 +120,8 @@ const WhoIsOnShift = () => {
         supabase
           .from('shifts')
           .select('id, user_id, site_id, started_at, ended_at, status, minutes_late, minutes_worked, total_paused_minutes, pause_history, is_overtime, is_paused')
-          .gte('started_at', todayStart),
+          .gte('started_at', lowerBound),
       ]);
-      setSites((sitesRes.data as SiteRow[]) || []);
       setProfiles((profilesRes.data as ProfileRow[]) || []);
       setAssignments(((assignmentsRes.data as unknown) as AssignmentRow[]) || []);
       setShifts((shiftsRes.data as ShiftRow[]) || []);
@@ -138,8 +160,17 @@ const WhoIsOnShift = () => {
           { expected_start: a.expected_start, expected_end: a.expected_end } as AssignmentOverride,
           { expected_start: site.expected_start, expected_end: site.expected_end, timezone: site.timezone },
         );
+        // Only shifts that fall into "today" in the SITE's timezone.
+        // A worker who started at 02:00 local on a Tashkent site is part
+        // of today's bucket; the same UTC instant for a Moscow-site shift
+        // belongs to yesterday — bucketing happens per-site, not per-server.
+        const todayKey = getDayKeyInTz(new Date(), site.timezone);
         const userShifts = shifts
-          .filter(s => s.user_id === a.user_id && s.site_id === site.id)
+          .filter(s =>
+            s.user_id === a.user_id
+            && s.site_id === site.id
+            && getDayKeyInTz(new Date(s.started_at), site.timezone) === todayKey,
+          )
           .sort((x, y) => new Date(x.started_at).getTime() - new Date(y.started_at).getTime());
         const stats = computeDayStats(
           userShifts.map((s): ShiftForStats => ({
@@ -161,6 +192,7 @@ const WhoIsOnShift = () => {
           fullName,
           effectiveStart: effective.start,
           effectiveEnd: effective.end,
+          siteTimezone: site.timezone ?? null,
           shifts: userShifts,
           stats,
           hasStartedToday: userShifts.length > 0,
@@ -173,8 +205,8 @@ const WhoIsOnShift = () => {
 
   // Discipline-of-the-day aggregates across ALL buckets in the company.
   const discipline = useMemo(() => {
-    let firstStarter: { userId: string; name: string; startedAt: Date; effectiveStart: string; tz?: string } | null = null;
-    let lastStarter: { userId: string; name: string; startedAt: Date } | null = null;
+    let firstStarter: { userId: string; name: string; startedAt: Date; effectiveStart: string; tz: string | null } | null = null;
+    let lastStarter: { userId: string; name: string; startedAt: Date; tz: string | null } | null = null;
     let worstLate: { userId: string; name: string; minutes: number } | null = null;
     let longestAbsence: { userId: string; name: string; minutes: number } | null = null;
     let mostExits: { userId: string; name: string; count: number } | null = null;
@@ -188,11 +220,11 @@ const WhoIsOnShift = () => {
             name: w.fullName,
             startedAt: w.stats.firstStartedAt,
             effectiveStart: w.effectiveStart,
-            tz: site.timezone ?? undefined,
+            tz: site.timezone ?? null,
           };
         }
         if (!lastStarter || w.stats.firstStartedAt > lastStarter.startedAt) {
-          lastStarter = { userId: w.userId, name: w.fullName, startedAt: w.stats.firstStartedAt };
+          lastStarter = { userId: w.userId, name: w.fullName, startedAt: w.stats.firstStartedAt, tz: site.timezone ?? null };
         }
         if (w.stats.minutesLate > 0 && (!worstLate || w.stats.minutesLate > worstLate.minutes)) {
           worstLate = { userId: w.userId, name: w.fullName, minutes: w.stats.minutesLate };
@@ -241,7 +273,7 @@ const WhoIsOnShift = () => {
                   <div>
                     <div className="font-medium">🎉 Первый на смене</div>
                     <div className="text-muted-foreground">
-                      {discipline.firstStarter.name} — {formatTime(discipline.firstStarter.startedAt)}
+                      {discipline.firstStarter.name} — {formatTimeInTz(discipline.firstStarter.startedAt, discipline.firstStarter.tz)}
                     </div>
                   </div>
                 </div>
@@ -252,7 +284,7 @@ const WhoIsOnShift = () => {
                   <div>
                     <div className="font-medium">🔻 Последним начал</div>
                     <div className="text-muted-foreground">
-                      {discipline.lastStarter.name} — {formatTime(discipline.lastStarter.startedAt)}
+                      {discipline.lastStarter.name} — {formatTimeInTz(discipline.lastStarter.startedAt, discipline.lastStarter.tz)}
                     </div>
                   </div>
                 </div>
@@ -382,7 +414,7 @@ const WhoIsOnShift = () => {
                       </div>
                       {w.stats.firstStartedAt && (
                         <div className="text-xs text-muted-foreground text-right shrink-0">
-                          с {formatTime(w.stats.firstStartedAt)}
+                          с {formatTimeInTz(w.stats.firstStartedAt, w.siteTimezone)}
                         </div>
                       )}
                     </div>

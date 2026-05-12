@@ -17,6 +17,79 @@ export function parseTime(timeStr: string): { hours: number; minutes: number } {
   return { hours, minutes };
 }
 
+// ---------------------------------------------------------------------------
+// Timezone-aware formatting + day boundaries.
+// All shift timestamps are stored in UTC; UI/grouping must use the SITE's
+// timezone, never the browser's. These helpers wrap Intl APIs so callers
+// don't have to construct DateTimeFormat options every time.
+// ---------------------------------------------------------------------------
+
+/** "HH:mm" in the given IANA timezone. Falls back to local time if tz is empty. */
+export function formatTimeInTz(date: Date, timezone?: string | null): string {
+  if (!timezone) return formatTime(date);
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+/** "dd.MM.yyyy" in the given IANA timezone. Falls back to local time if tz is empty. */
+export function formatDateInTz(date: Date, timezone?: string | null): string {
+  if (!timezone) return formatDate(date);
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: timezone,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}
+
+/** "dd.MM.yyyy HH:mm" in the given IANA timezone. */
+export function formatDateTimeInTz(date: Date, timezone?: string | null): string {
+  if (!timezone) return formatDateTime(date);
+  return `${formatDateInTz(date, timezone)} ${formatTimeInTz(date, timezone)}`;
+}
+
+/**
+ * Returns a sortable "YYYY-MM-DD" key for `date` interpreted in `timezone`.
+ * Use this to group shifts by "working day" independently of where the
+ * server / browser is located.
+ */
+export function getDayKeyInTz(date: Date, timezone?: string | null): string {
+  if (!timezone) {
+    // Local-time fallback. en-CA's "short" gives "YYYY-MM-DD".
+    return new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(date);
+  }
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * Returns the UTC instant corresponding to 00:00 on `reference`'s calendar
+ * day in `timezone`. Use for "today" filters like
+ * `shifts.started_at >= getDayStartInTz(new Date(), site.timezone)`.
+ */
+export function getDayStartInTz(reference: Date, timezone?: string | null): Date {
+  if (!timezone) {
+    const d = new Date(reference);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  // Same trick as getExpectedDateInTz: build the site-local view, set time
+  // to midnight, convert back to real UTC via the tz offset.
+  const refAsTzLocal = new Date(reference.toLocaleString('en-US', { timeZone: timezone }));
+  const tzOffsetMs = reference.getTime() - refAsTzLocal.getTime();
+  const midnightLocal = new Date(refAsTzLocal);
+  midnightLocal.setHours(0, 0, 0, 0);
+  return new Date(midnightLocal.getTime() + tzOffsetMs);
+}
+
 /**
  * Build a Date that represents the given HH:MM time on the same calendar date
  * as `reference`, but interpreted in the given IANA timezone.

@@ -19,6 +19,7 @@ interface Shift {
   total_paused_minutes?: number;
   early_minutes?: number;
   pause_events: PauseEvent[];
+  site_timezone?: string | null;
 }
 
 interface DayStats {

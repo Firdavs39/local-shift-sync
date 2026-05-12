@@ -13,10 +13,22 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, MapPin, Plus, Trash2, Navigation, RefreshCw, Users, X } from 'lucide-react';
+import { ArrowLeft, MapPin, Plus, Trash2, Navigation, RefreshCw, Users, X, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDistance, getCurrentPositionAccurate } from '@/lib/geo';
 import { supabase } from '@/integrations/supabase/client';
+import tzLookup from 'tz-lookup';
+
+// Resolve IANA timezone from (lat, lon). Falls back to browser timezone if
+// lookup fails (e.g. coords in the open ocean or out of range).
+function resolveTimezone(lat: number, lon: number): { tz: string; auto: boolean } {
+  try {
+    return { tz: tzLookup(lat, lon), auto: true };
+  } catch {
+    const fallback = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    return { tz: fallback, auto: false };
+  }
+}
 
 interface Site {
   id: string;
@@ -58,11 +70,30 @@ const SitesManagement = () => {
     radiusM: '100',
     expectedStart: '09:00',
     expectedEnd: '18:00',
-    tz: 'Europe/Moscow'
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   });
+  // True while tz was last set by auto-detection from lat/lon. Becomes false
+  // if the admin overrides the field manually. Stays true so we can show
+  // "автоопределено" badge in the form.
+  const [tzAuto, setTzAuto] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
+
+  // Auto-detect timezone whenever the lat/lon pair changes to a valid value.
+  // Only updates tz if the admin hasn't overridden it manually in this session.
+  useEffect(() => {
+    const lat = parseFloat(formData.lat);
+    const lon = parseFloat(formData.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    const resolved = resolveTimezone(lat, lon);
+    setFormData(prev => ({ ...prev, tz: resolved.tz }));
+    setTzAuto(resolved.auto);
+    // Intentionally depend only on lat/lon — we DO want to overwrite a previous
+    // auto-detected tz when the coords change. Manual override is preserved
+    // through the onChange handler on the tz input (which sets tzAuto=false).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.lat, formData.lon]);
 
   // Per-site assignments + workers list for the "manage workers" dialog.
   const [assignmentsBySite, setAssignmentsBySite] = useState<Record<string, Assignment[]>>({});
@@ -343,8 +374,9 @@ const SitesManagement = () => {
       radiusM: '100',
       expectedStart: '09:00',
       expectedEnd: '18:00',
-      tz: 'Europe/Moscow'
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     });
+    setTzAuto(false);
     loadSites();
   };
 
@@ -523,6 +555,31 @@ const SitesManagement = () => {
                 </div>
               </div>
 
+              <div>
+                <Label className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-primary" />
+                  Часовой пояс объекта
+                  {tzAuto && (
+                    <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                      автоопределён
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  value={formData.tz}
+                  onChange={(e) => {
+                    setFormData({ ...formData, tz: e.target.value });
+                    setTzAuto(false);
+                  }}
+                  placeholder="Asia/Tashkent"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Определяется автоматически из координат. По нему считаются опоздания,
+                  ранний приход и время окончания смены. Меняйте только если автоопределение
+                  ошиблось.
+                </p>
+              </div>
+
               <div className="flex gap-3">
                 <Button type="submit" className="flex-1">Сохранить</Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
@@ -556,6 +613,7 @@ const SitesManagement = () => {
                       <p>📍 {site.lat.toFixed(6)}, {site.lon.toFixed(6)}</p>
                       <p>⭕ Радиус: {site.radius_m}м</p>
                       <p>🕒 По умолчанию: {site.expected_start} - {site.expected_end}</p>
+                      <p>🌍 {site.timezone}</p>
                     </div>
                   </div>
                   <Button

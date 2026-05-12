@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { PeriodFilter } from '@/components/shifts/PeriodFilter';
 import { PeriodStats } from '@/components/shifts/PeriodStats';
 import { DailyBreakdown } from '@/components/shifts/DailyBreakdown';
-import { calculateEarlyMinutes, formatDate } from '@/lib/time';
+import { calculateEarlyMinutes, formatDateInTz, getDayKeyInTz } from '@/lib/time';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { computeDayStats } from '@/lib/discipline';
 import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
@@ -34,6 +34,7 @@ interface ShiftWithDetails {
   early_minutes?: number;
   pause_events: PauseEvent[];
   expected_start: string;
+  site_timezone?: string | null;
 }
 
 interface DayStats {
@@ -114,7 +115,8 @@ const MyShifts = () => {
           sites (
             name,
             expected_start,
-            expected_end
+            expected_end,
+            timezone
           )
         `)
         .eq('user_id', user.id)
@@ -156,13 +158,14 @@ const MyShifts = () => {
           return pause;
         });
 
+        const siteTz: string | null = shift.sites?.timezone ?? null;
         const effective = pickEffectiveTimes(
           assignmentMap.get(shift.site_id) || null,
-          { expected_start: shift.sites.expected_start, expected_end: shift.sites.expected_end },
+          { expected_start: shift.sites.expected_start, expected_end: shift.sites.expected_end, timezone: siteTz },
         );
 
         const earlyMinutes = shift.status === 'early' || shift.status === 'on_time'
-          ? calculateEarlyMinutes(new Date(shift.started_at), effective.start)
+          ? calculateEarlyMinutes(new Date(shift.started_at), effective.start, siteTz ?? undefined)
           : 0;
 
         return {
@@ -178,6 +181,7 @@ const MyShifts = () => {
           early_minutes: earlyMinutes,
           pause_events: pauseEvents,
           expected_start: effective.start,
+          site_timezone: siteTz,
         };
       });
 
@@ -209,22 +213,28 @@ const MyShifts = () => {
   };
 
   const groupShiftsByDay = () => {
+    // Bucket by "site day": the day key is computed in the site's own
+    // timezone, then the bucket label is the formatted Russian-style date
+    // in that same zone. A late-night Tashkent shift won't bleed into the
+    // next browser-local day.
     const grouped = new Map<string, ShiftWithDetails[]>();
 
     shifts.forEach((shift) => {
-      const date = formatDate(new Date(shift.started_at));
-      if (!grouped.has(date)) {
-        grouped.set(date, []);
+      const tz = shift.site_timezone ?? null;
+      const key = `${getDayKeyInTz(new Date(shift.started_at), tz)}|${tz ?? ''}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
       }
-      grouped.get(date)!.push(shift);
+      grouped.get(key)!.push(shift);
     });
 
-    return Array.from(grouped.entries()).map(([date, dayShifts]) => {
+    return Array.from(grouped.entries()).map(([, dayShifts]) => {
       // Anchor lateness/early to the day's first shift via computeDayStats,
       // so that restarting the shift mid-day doesn't reset the discipline
       // metrics. All shifts in the bucket share the same expected_start
       // because they're on the same site (different sites get separate buckets).
       const expectedStart = dayShifts[0]?.expected_start;
+      const tz = dayShifts[0]?.site_timezone ?? null;
       const stats = computeDayStats(
         dayShifts.map(s => ({
           id: s.id,
@@ -234,7 +244,7 @@ const MyShifts = () => {
           total_paused_minutes: s.total_paused_minutes ?? null,
           pause_history: s.pause_events,
         })),
-        expectedStart ? { start: expectedStart } : null,
+        expectedStart ? { start: expectedStart, timezone: tz ?? undefined } : null,
       );
 
       const dayStats: DayStats = {
@@ -247,7 +257,8 @@ const MyShifts = () => {
       };
 
       return {
-        date,
+        // Display label = site-tz date of the bucket's first shift.
+        date: formatDateInTz(new Date(dayShifts[0].started_at), tz),
         shifts: dayShifts,
         dayStats,
       };
