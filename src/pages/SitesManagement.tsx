@@ -345,6 +345,20 @@ const SitesManagement = () => {
       return;
     }
 
+    // Final safety net: if the admin never overrode tz manually (tzAuto stays
+    // true), always recompute it from the SUBMITTED coords right before save.
+    // Protects against race conditions where the useEffect didn't fire (e.g.
+    // form filled by paste, or a stale tz from a previous session was still
+    // in formData). Falls back to whatever's in formData if lookup fails.
+    let finalTz = formData.tz;
+    if (tzAuto) {
+      try {
+        finalTz = tzLookup(lat, lon);
+      } catch {
+        // keep formData.tz as-is
+      }
+    }
+
     const { error } = await supabase
       .from('sites')
       .insert({
@@ -354,7 +368,7 @@ const SitesManagement = () => {
         radius_m: radiusM,
         expected_start: formData.expectedStart,
         expected_end: formData.expectedEnd,
-        timezone: formData.tz,
+        timezone: finalTz,
         active: true,
         company_id: companyId,
       });
