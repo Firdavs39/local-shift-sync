@@ -28,6 +28,10 @@ export interface GroupedShift {
   out_of_radius_count: number;
   /** Самое длительное отсутствие на месте в минутах (максимальная пауза). */
   longest_absence_minutes: number;
+  /** Sum of approved overtime minutes across the group (discarded/pending excluded if hideDiscarded). */
+  overtime_minutes_approved: number;
+  /** Sum of pending overtime minutes — waiting for the worker to confirm. */
+  overtime_minutes_pending: number;
 }
 
 export interface ShiftSegment {
@@ -63,6 +67,9 @@ interface BaseShift {
   site_timezone?: string | null;
   auto_ended?: boolean;
   is_overtime?: boolean;
+  overtime_minutes?: number;
+  /** none | pending | approved | discarded. Discarded is hidden in the UI. */
+  overtime_status?: string;
 }
 
 /**
@@ -155,6 +162,8 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     const shift = shifts[0];
     const history = shift.pause_history || [];
     const { out_of_radius_count, longest_absence_minutes } = summarizePauses(history);
+    const ot = shift.overtime_minutes ?? 0;
+    const otStatus = shift.overtime_status ?? 'none';
     return {
       ...shift,
       shift_ids: [shift.id],
@@ -168,6 +177,8 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
       is_overtime: shift.is_overtime,
       out_of_radius_count,
       longest_absence_minutes,
+      overtime_minutes_approved: otStatus === 'approved' ? ot : 0,
+      overtime_minutes_pending: otStatus === 'pending' ? ot : 0,
     };
   }
 
@@ -243,6 +254,15 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     longest_absence_minutes,
   );
 
+  // Sum overtime across segments by status — discarded is invisible.
+  let overtime_minutes_approved = 0;
+  let overtime_minutes_pending = 0;
+  for (const s of shifts) {
+    const ot = s.overtime_minutes ?? 0;
+    if (s.overtime_status === 'approved') overtime_minutes_approved += ot;
+    else if (s.overtime_status === 'pending') overtime_minutes_pending += ot;
+  }
+
   return {
     id: firstShift.id,
     shift_ids: shifts.map(s => s.id),
@@ -267,5 +287,7 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     is_overtime: firstShift.is_overtime,
     out_of_radius_count,
     longest_absence_minutes: longestWithGaps,
+    overtime_minutes_approved,
+    overtime_minutes_pending,
   };
 }

@@ -161,7 +161,7 @@ async function handleShifts(supabase: any, ctx: KeyContext, url: URL) {
   let q = supabase
     .from('shifts')
     .select(
-      'id, user_id, site_id, started_at, ended_at, status, minutes_late, minutes_worked, total_paused_minutes, auto_ended, is_overtime, profiles!inner(full_name), sites!inner(name, timezone, expected_start, expected_end)'
+      'id, user_id, site_id, started_at, ended_at, status, minutes_late, minutes_worked, total_paused_minutes, auto_ended, is_overtime, overtime_minutes, overtime_status, profiles!inner(full_name), sites!inner(name, timezone, expected_start, expected_end)'
     )
     .eq('company_id', ctx.company_id)
     .order('started_at', { ascending: false })
@@ -215,6 +215,11 @@ async function handleShifts(supabase: any, ctx: KeyContext, url: URL) {
       total_paused_minutes: s.total_paused_minutes,
       auto_ended: s.auto_ended,
       is_overtime: s.is_overtime,
+      // Overtime payroll fields. 'discarded' status is intentionally surfaced
+      // so admin tooling/audits can see "this row was rejected by the worker",
+      // but UI clients normally treat it as zero.
+      overtime_minutes: s.overtime_minutes ?? 0,
+      overtime_status: s.overtime_status ?? 'none',
     };
   });
 

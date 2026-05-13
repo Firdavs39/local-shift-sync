@@ -37,6 +37,8 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
     'Самое длинное отсутствие (мин)',
     'Отработано (мин)',
     'Отработано (ч:мм)',
+    'Переработка засчитана (мин)',
+    'Переработка ждёт подтверждения (мин)',
   ];
 
   const rows = shifts.map((shift) => {
@@ -63,6 +65,8 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
       escapeCSV(shift.longest_absence_minutes ?? 0),
       escapeCSV(shift.minutes_worked ?? ''),
       escapeCSV(workedH),
+      escapeCSV(shift.overtime_minutes_approved ?? 0),
+      escapeCSV(shift.overtime_minutes_pending ?? 0),
     ].join(',');
   });
 

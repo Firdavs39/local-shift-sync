@@ -35,6 +35,8 @@ interface ShiftWithDetails {
   pause_events: PauseEvent[];
   expected_start: string;
   site_timezone?: string | null;
+  overtime_minutes_approved?: number;
+  overtime_minutes_pending?: number;
 }
 
 interface DayStats {
@@ -44,6 +46,8 @@ interface DayStats {
   pausedMinutes: number;
   outOfRadiusCount: number;
   longestAbsenceMinutes: number;
+  overtimeApprovedMinutes: number;
+  overtimePendingMinutes: number;
 }
 
 const MyShifts = () => {
@@ -168,6 +172,9 @@ const MyShifts = () => {
           ? calculateEarlyMinutes(new Date(shift.started_at), effective.start, siteTz ?? undefined)
           : 0;
 
+        const ot = shift.overtime_minutes ?? 0;
+        const otStatus = shift.overtime_status ?? 'none';
+
         return {
           id: shift.id,
           site_id: shift.site_id,
@@ -182,6 +189,8 @@ const MyShifts = () => {
           pause_events: pauseEvents,
           expected_start: effective.start,
           site_timezone: siteTz,
+          overtime_minutes_approved: otStatus === 'approved' ? ot : 0,
+          overtime_minutes_pending: otStatus === 'pending' ? ot : 0,
         };
       });
 
@@ -247,6 +256,9 @@ const MyShifts = () => {
         expectedStart ? { start: expectedStart, timezone: tz ?? undefined } : null,
       );
 
+      const overtimeApprovedMinutes = dayShifts.reduce((sum, s) => sum + (s.overtime_minutes_approved ?? 0), 0);
+      const overtimePendingMinutes = dayShifts.reduce((sum, s) => sum + (s.overtime_minutes_pending ?? 0), 0);
+
       const dayStats: DayStats = {
         workedMinutes: stats.totalWorkedMinutes,
         lateMinutes: stats.minutesLate,
@@ -254,6 +266,8 @@ const MyShifts = () => {
         pausedMinutes: stats.totalPausedMinutes,
         outOfRadiusCount: stats.outOfRadiusCount,
         longestAbsenceMinutes: stats.longestAbsenceMinutes,
+        overtimeApprovedMinutes,
+        overtimePendingMinutes,
       };
 
       return {
