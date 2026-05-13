@@ -627,7 +627,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      am_i_first_today: { Args: never; Returns: boolean }
+      am_i_first_today: { Args: { tz?: string }; Returns: boolean }
       cleanup_audit_log: { Args: never; Returns: number }
       consume_rate_limit_token: {
         Args: { p_cost?: number; p_key_id: string }

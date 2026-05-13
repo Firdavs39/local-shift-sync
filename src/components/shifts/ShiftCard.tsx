@@ -8,7 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { MapPin, Clock, Pause, TrendingUp, TrendingDown, CheckCircle, Bot, Zap } from 'lucide-react';
-import { formatTime } from '@/lib/time';
+import { formatTimeInTz } from '@/lib/time';
 
 interface PauseEvent {
   paused_at: string;
@@ -30,6 +30,7 @@ interface ShiftCardProps {
     pause_events: PauseEvent[];
     auto_ended?: boolean;
     is_overtime?: boolean;
+    site_timezone?: string | null;
   };
 }
 
@@ -102,8 +103,8 @@ export function ShiftCard({ shift }: ShiftCardProps) {
                     )}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {formatTime(new Date(shift.started_at))}
-                    {shift.ended_at && ` - ${formatTime(new Date(shift.ended_at))}`}
+                    {formatTimeInTz(new Date(shift.started_at), shift.site_timezone)}
+                    {shift.ended_at && ` - ${formatTimeInTz(new Date(shift.ended_at), shift.site_timezone)}`}
                     {shift.minutes_worked !== undefined && (
                       <span className="ml-2">
                         ({Math.floor(shift.minutes_worked / 60)}ч {shift.minutes_worked % 60}м)
@@ -126,7 +127,7 @@ export function ShiftCard({ shift }: ShiftCardProps) {
                 </div>
                 {shift.status === 'late' && (
                   <div className="text-xs text-muted-foreground mt-1">
-                    Пришли в {formatTime(new Date(shift.started_at))}
+                    Пришли в {formatTimeInTz(new Date(shift.started_at), shift.site_timezone)}
                   </div>
                 )}
                 {shift.status === 'early' && shift.early_minutes && (
@@ -176,11 +177,11 @@ export function ShiftCard({ shift }: ShiftCardProps) {
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
-                          Начало: {formatTime(new Date(pause.paused_at))}
+                          Начало: {formatTimeInTz(new Date(pause.paused_at), shift.site_timezone)}
                         </div>
                         {pause.resumed_at && (
                           <div className="text-xs text-muted-foreground">
-                            Конец: {formatTime(new Date(pause.resumed_at))}
+                            Конец: {formatTimeInTz(new Date(pause.resumed_at), shift.site_timezone)}
                           </div>
                         )}
                         {!pause.resumed_at && (

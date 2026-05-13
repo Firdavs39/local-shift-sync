@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, RefreshCw, Users, Pause, TrendingUp, Download, Footprints, Repeat } from 'lucide-react';
 import { exportShiftsToCSV } from '@/lib/csv-export';
-import { formatTime, formatDate, calculateEarlyMinutes } from '@/lib/time';
+import { formatTimeInTz, formatDateInTz, calculateEarlyMinutes } from '@/lib/time';
 import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 import { toast } from 'sonner';
 import { PeriodFilter, PeriodType } from '@/components/shifts/PeriodFilter';
@@ -28,6 +28,7 @@ interface ShiftReport {
   pause_history?: any[];
   total_paused_minutes?: number;
   expected_start?: string;
+  site_timezone?: string | null;
 }
 
 const PAGE_SIZE = 50;
@@ -96,7 +97,7 @@ const Reports = () => {
       const siteIds = [...new Set(shiftsData?.map(s => s.site_id) || [])];
       const { data: sites } = await supabase
         .from('sites')
-        .select('id, name, expected_start, expected_end')
+        .select('id, name, expected_start, expected_end, timezone')
         .in('id', siteIds);
 
       // Load all (user, site) assignment overrides relevant to this batch.
@@ -115,7 +116,7 @@ const Reports = () => {
       }
 
       const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]));
-      const siteMap = new Map(sites?.map(s => [s.id, { name: s.name, expected_start: s.expected_start, expected_end: s.expected_end }]));
+      const siteMap = new Map(sites?.map(s => [s.id, { name: s.name, expected_start: s.expected_start, expected_end: s.expected_end, timezone: s.timezone }]));
 
       const enrichedShifts: ShiftReport[] = (shiftsData || [])
         .filter(shift => shift.status !== 'offsite') // Filter out old offsite shifts
@@ -124,11 +125,11 @@ const Reports = () => {
           const effective = siteInfo
             ? pickEffectiveTimes(
                 assignmentMap.get(`${shift.user_id}|${shift.site_id}`) || null,
-                { expected_start: siteInfo.expected_start, expected_end: siteInfo.expected_end },
+                { expected_start: siteInfo.expected_start, expected_end: siteInfo.expected_end, timezone: siteInfo.timezone },
               )
             : null;
           const earlyMinutes = effective
-            ? calculateEarlyMinutes(new Date(shift.started_at), effective.start)
+            ? calculateEarlyMinutes(new Date(shift.started_at), effective.start, siteInfo?.timezone)
             : undefined;
 
           return {
@@ -137,6 +138,7 @@ const Reports = () => {
             user_name: profileMap.get(shift.user_id) || 'Неизвестно',
             site_name: siteInfo?.name || 'Неизвестно',
             expected_start: effective?.start,
+            site_timezone: siteInfo?.timezone ?? null,
             early_minutes: earlyMinutes,
             pause_history: Array.isArray(shift.pause_history) ? shift.pause_history : [],
           };
@@ -264,15 +266,15 @@ const Reports = () => {
                             <TableCell>{shift.site_name}</TableCell>
                             <TableCell>
                               <div className="text-sm">
-                                <div>{formatDate(new Date(shift.started_at))}</div>
-                                <div className="text-muted-foreground">{formatTime(new Date(shift.started_at))}</div>
+                                <div>{formatDateInTz(new Date(shift.started_at), shift.site_timezone)}</div>
+                                <div className="text-muted-foreground">{formatTimeInTz(new Date(shift.started_at), shift.site_timezone)}</div>
                               </div>
                             </TableCell>
                             <TableCell>
                               {shift.ended_at ? (
                                 <div className="text-sm">
-                                  <div>{formatDate(new Date(shift.ended_at))}</div>
-                                  <div className="text-muted-foreground">{formatTime(new Date(shift.ended_at))}</div>
+                                  <div>{formatDateInTz(new Date(shift.ended_at), shift.site_timezone)}</div>
+                                  <div className="text-muted-foreground">{formatTimeInTz(new Date(shift.ended_at), shift.site_timezone)}</div>
                                 </div>
                               ) : (
                                 <span className="text-muted-foreground">В процессе</span>

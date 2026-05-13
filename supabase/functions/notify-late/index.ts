@@ -6,9 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const formatTimestamp = (iso: string): string => {
+// Format an ISO timestamp as "HH:mm" in the given IANA timezone (e.g. the
+// site's local zone). Falls back to UTC if no zone is provided.
+const formatTimestamp = (iso: string, timezone: string): string => {
   const d = new Date(iso);
-  return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
+  return d.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: timezone || 'UTC',
+  });
 };
 
 serve(async (req) => {
@@ -54,23 +60,27 @@ serve(async (req) => {
       .eq('id', user_id)
       .single();
 
-    // Get site name
+    // Get site name and timezone — we want to format the "arrival time" in
+    // the LOCAL zone of the object, not the server's. A Tashkent worker
+    // arriving at 09:42 local should see 09:42 in the message, not 06:42 UTC
+    // nor 09:42 Europe/Moscow (which used to be hardcoded).
     const { data: site } = await supabaseAdmin
       .from('sites')
-      .select('name')
+      .select('name, timezone')
       .eq('id', site_id)
       .single();
 
     const workerName = profile?.full_name ?? 'Сотрудник';
     const siteName = site?.name ?? 'Объект';
-    const time = started_at ? formatTimestamp(started_at) : '';
+    const siteTimezone = site?.timezone ?? 'UTC';
+    const time = started_at ? formatTimestamp(started_at, siteTimezone) : '';
 
     const message = [
       `⚠️ *Опоздание на работу*`,
       ``,
       `👤 *${workerName}*`,
       `📍 Объект: ${siteName}`,
-      `⏰ Время прихода: ${time}`,
+      `⏰ Время прихода: ${time} (${siteTimezone})`,
       `🕐 Опоздание: *${minutes_late} мин*`,
     ].join('\n');
 

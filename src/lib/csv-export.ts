@@ -1,5 +1,5 @@
 import { GroupedShift } from './shift-grouping';
-import { formatDate, formatTime } from './time';
+import { formatDateInTz, formatTimeInTz } from './time';
 
 const escapeCSV = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) return '';
@@ -24,6 +24,7 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
   const headers = [
     'Сотрудник',
     'Объект',
+    'Часовой пояс',
     'Дата начала',
     'Время начала',
     'Дата конца',
@@ -39,6 +40,7 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
   ];
 
   const rows = shifts.map((shift) => {
+    const tz = shift.site_timezone ?? null;
     const startDate = new Date(shift.started_at);
     const endDate = shift.ended_at ? new Date(shift.ended_at) : null;
     const workedH = shift.minutes_worked
@@ -48,10 +50,11 @@ export const exportShiftsToCSV = (shifts: GroupedShift[], filename = 'shifts-exp
     return [
       escapeCSV(shift.user_name),
       escapeCSV(shift.site_name),
-      escapeCSV(formatDate(startDate)),
-      escapeCSV(formatTime(startDate)),
-      escapeCSV(endDate ? formatDate(endDate) : ''),
-      escapeCSV(endDate ? formatTime(endDate) : 'В процессе'),
+      escapeCSV(tz ?? ''),
+      escapeCSV(formatDateInTz(startDate, tz)),
+      escapeCSV(formatTimeInTz(startDate, tz)),
+      escapeCSV(endDate ? formatDateInTz(endDate, tz) : ''),
+      escapeCSV(endDate ? formatTimeInTz(endDate, tz) : 'В процессе'),
       escapeCSV(getStatusLabel(shift.status)),
       escapeCSV(shift.minutes_late > 0 ? shift.minutes_late : 0),
       escapeCSV(shift.early_minutes && shift.early_minutes > 0 ? shift.early_minutes : 0),

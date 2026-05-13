@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance, type RadiusEvaluation } from '@/lib/geo';
-import { getShiftStatus, formatTime, formatDate, calculateMinutesWorked, getMinutesLate, isAfterExpected } from '@/lib/time';
+import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz } from '@/lib/time';
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
 import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle, CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
@@ -61,6 +61,11 @@ const Me = () => {
   const [isFirstOfDay, setIsFirstOfDay] = useState<boolean>(false);
   /** site_id → assignment override (if any). Missing key = use site defaults. */
   const [myAssignments, setMyAssignments] = useState<Record<string, AssignmentOverride>>({});
+  // Buttons are disabled while a start/end request is in flight, so a
+  // double-tap can't create two near-identical shift rows (we had a pair
+  // 2ms apart in prod).
+  const [isStartingShift, setIsStartingShift] = useState(false);
+  const [isEndingShift, setIsEndingShift] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -81,23 +86,42 @@ const Me = () => {
 
   // Load TODAY's shifts (all of them, for the bucketed "today" stats block).
   // Lateness/early/absence accumulate across restarts → we need every row.
+  // "Today" is interpreted in the timezone of the focused site (active shift's
+  // site, otherwise selected site), so a worker in Tashkent starting a shift
+  // at 23:00 local sees only TODAY's shifts (Tashkent calendar day), not
+  // shifts from yesterday's UTC date or the browser's local date.
   const refreshTodayShifts = async () => {
     if (!user) return;
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    // We may not know which site the worker will choose; the safest "today"
+    // window is the EARLIEST midnight across known site timezones. That way
+    // we never miss a shift on the boundary. Final bucketing into per-site
+    // "today" happens in the discipline block UI.
+    const candidateTzs = sites.map(s => s.timezone).filter(Boolean);
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tzs = candidateTzs.length > 0 ? candidateTzs : [browserTz];
+    const earliestMidnight = tzs
+      .map(tz => getDayStartInTz(new Date(), tz).getTime())
+      .reduce((a, b) => Math.min(a, b));
     const { data } = await supabase
       .from('shifts')
       .select('*')
       .eq('user_id', user.id)
-      .gte('started_at', startOfToday.toISOString())
+      .gte('started_at', new Date(earliestMidnight).toISOString())
       .order('started_at', { ascending: true });
     setTodayShifts((data as Shift[]) || []);
   };
 
   // RPC: is the current user the first shift-starter in their company today?
+  // "Today" is interpreted in the timezone of the worker's focus site (active
+  // shift's site → selected site → browser timezone fallback). This matches
+  // how the "Today" block buckets shifts.
   const refreshIsFirstOfDay = async () => {
     if (!user) return;
-    const { data } = await supabase.rpc('am_i_first_today');
+    const focusSite = activeShift
+      ? sites.find(s => s.id === activeShift.site_id)
+      : selectedSite;
+    const tz = focusSite?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const { data } = await supabase.rpc('am_i_first_today', { tz });
     setIsFirstOfDay(Boolean(data));
   };
 
@@ -428,6 +452,10 @@ const Me = () => {
       toast.error('Выберите объект для начала смены');
       return;
     }
+    // Guard against rapid double-tap on the start button — without this we
+    // saw shift rows in prod created 2ms apart from the same click burst.
+    if (isStartingShift) return;
+    setIsStartingShift(true);
 
     try {
       // Check if user has any active shift
@@ -482,6 +510,23 @@ const Me = () => {
       // the server-side auto-end-shifts function.
       const isAfterExpectedEnd = isAfterExpected(now, effective.end, siteTz);
 
+      // Is this the worker's FIRST shift on this site today (in the site's tz)?
+      // If yes — score against expected_start. If no — the worker has already
+      // been counted as on-time / late earlier today; restarting the shift
+      // shouldn't re-trigger lateness or duplicate the minutes_late number.
+      // The discipline "Today" block keeps showing the correct accumulated
+      // value because it computes lateness from FIRST started_at, not from
+      // the per-row minutes_late column.
+      const dayStartUtc = getDayStartInTz(now, siteTz).toISOString();
+      const { data: priorTodayShifts } = await supabase
+        .from('shifts')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('site_id', selectedSite.id)
+        .gte('started_at', dayStartUtc)
+        .limit(1);
+      const isFirstShiftToday = !priorTodayShifts || priorTodayShifts.length === 0;
+
       let status: 'early' | 'on_time' | 'late' | 'offsite';
       let minutesLate = 0;
       let isOvertime = false;
@@ -495,12 +540,15 @@ const Me = () => {
         toast.info('⚡ Начата сверхурочная смена (переработка)', {
           description: `Смена начата после ${effective.end}`,
         });
-      } else {
-        // Within working hours — always score against expected_start, even on
-        // the 2nd/3rd shift of the day. Discipline metrics must not reset just
-        // because the worker stopped and restarted.
+      } else if (isFirstShiftToday) {
+        // First shift of the day on this site → score against expected_start.
         status = getShiftStatus(now, effective.start, true, siteTz);
         minutesLate = status === 'late' ? getMinutesLate(now, effective.start, siteTz) : 0;
+      } else {
+        // Repeat shift within working hours — lateness was already recorded
+        // on the first shift of the day. This restart is a "continuation".
+        status = 'on_time';
+        minutesLate = 0;
       }
 
       const { data, error } = await supabase
@@ -533,11 +581,17 @@ const Me = () => {
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
       console.error(error);
+    } finally {
+      setIsStartingShift(false);
     }
   };
 
   const handleEndShift = async () => {
     if (!activeShift) return;
+    // Same double-tap guard as start — without it a quick double-press
+    // can race the update and yield inconsistent minutes_worked.
+    if (isEndingShift) return;
+    setIsEndingShift(true);
 
     try {
       const pos = await getCurrentPositionAccurate({ targetAccuracyM: 30, maxSamples: 3, timeoutMs: 12000 });
@@ -571,10 +625,40 @@ const Me = () => {
 
       const now = new Date();
 
+      // If the shift is currently on an OPEN pause (auto or manual), close
+      // that pause entry first — otherwise its duration would silently get
+      // counted as "work". Mirrors the logic in auto-end-shifts (server).
+      let totalPausedMinutes = activeShift.total_paused_minutes || 0;
+      const pauseHistory: Array<Record<string, unknown>> = Array.isArray(activeShift.pause_history)
+        ? [...activeShift.pause_history]
+        : [];
+      if (activeShift.is_paused && activeShift.paused_at) {
+        const pauseStartTime = new Date(activeShift.paused_at);
+        const openPauseMinutes = Math.max(0, Math.floor((now.getTime() - pauseStartTime.getTime()) / 60000));
+        totalPausedMinutes += openPauseMinutes;
+
+        const lastIdx = pauseHistory.length - 1;
+        const lastEntry = lastIdx >= 0 ? pauseHistory[lastIdx] : null;
+        if (lastEntry && !lastEntry.resumed_at) {
+          pauseHistory[lastIdx] = {
+            ...lastEntry,
+            resumed_at: now.toISOString(),
+            duration_minutes: openPauseMinutes,
+          };
+        } else {
+          // Defensive: no open entry to close → append a canonical record.
+          pauseHistory.push({
+            paused_at: activeShift.paused_at,
+            resumed_at: now.toISOString(),
+            reason: 'auto',
+            duration_minutes: openPauseMinutes,
+          });
+        }
+      }
+
       // Calculate total minutes worked excluding paused time
       const totalMinutes = calculateMinutesWorked(new Date(activeShift.started_at), now);
-      const pausedMinutes = activeShift.total_paused_minutes || 0;
-      const minutesWorked = totalMinutes - pausedMinutes;
+      const minutesWorked = Math.max(0, totalMinutes - totalPausedMinutes);
 
       const { error } = await supabase
         .from('shifts')
@@ -585,6 +669,8 @@ const Me = () => {
           minutes_worked: minutesWorked,
           is_paused: false,
           paused_at: null,
+          total_paused_minutes: totalPausedMinutes,
+          pause_history: pauseHistory,
         })
         .eq('id', activeShift.id);
 
@@ -599,6 +685,8 @@ const Me = () => {
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
       console.error(error);
+    } finally {
+      setIsEndingShift(false);
     }
   };
 
@@ -768,9 +856,15 @@ const Me = () => {
         {(() => {
           if (todayShifts.length === 0) return null;
           const focusSiteId = activeShift?.site_id || todayShifts[todayShifts.length - 1].site_id;
-          const bucket = todayShifts.filter(s => s.site_id === focusSiteId);
-          if (bucket.length === 0) return null;
           const site = sites.find(s => s.id === focusSiteId);
+          // Filter to shifts from "today" in the SITE's timezone, not browser local.
+          // Worker can have two shifts at 23:30 and 01:30 local — those are
+          // different days in the site's tz and shouldn't share a bucket.
+          const todayKey = getDayKeyInTz(new Date(), site?.timezone);
+          const bucket = todayShifts.filter(
+            s => s.site_id === focusSiteId && getDayKeyInTz(new Date(s.started_at), site?.timezone) === todayKey,
+          );
+          if (bucket.length === 0) return null;
           const effective = site
             ? pickEffectiveTimes(
                 myAssignments[focusSiteId],
@@ -876,7 +970,12 @@ const Me = () => {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Начало:</span>
-                <span className="font-medium">{formatTime(new Date(activeShift.started_at))}</span>
+                <span className="font-medium">
+                  {formatTimeInTz(
+                    new Date(activeShift.started_at),
+                    sites.find(s => s.id === activeShift.site_id)?.timezone ?? null,
+                  )}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Статус:</span>
@@ -926,11 +1025,12 @@ const Me = () => {
 
             <Button
               onClick={handleEndShift}
+              disabled={isEndingShift}
               className="w-full bg-gradient-to-r from-destructive to-destructive/80"
               size="lg"
             >
               <Square className="w-5 h-5 mr-2" />
-              Закончить смену
+              {isEndingShift ? 'Завершение…' : 'Закончить смену'}
             </Button>
           </Card>
         ) : (
@@ -1003,12 +1103,16 @@ const Me = () => {
                 
                 <Button
                   onClick={handleStartShift}
-                  disabled={!selectedSite}
+                  disabled={!selectedSite || isStartingShift}
                   className="w-full bg-gradient-to-r from-primary to-accent"
                   size="lg"
                 >
                   <Play className="w-5 h-5 mr-2" />
-                  {selectedSite ? `Начать смену на "${selectedSite.name}"` : 'Выберите объект'}
+                  {isStartingShift
+                    ? 'Запуск…'
+                    : selectedSite
+                      ? `Начать смену на "${selectedSite.name}"`
+                      : 'Выберите объект'}
                 </Button>
               </>
             ) : (

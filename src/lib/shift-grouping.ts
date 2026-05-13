@@ -1,4 +1,5 @@
 import { differenceInMinutes } from 'date-fns';
+import { getDayKeyInTz } from './time';
 
 export interface GroupedShift {
   id: string; // ID первой смены в группе
@@ -16,6 +17,8 @@ export interface GroupedShift {
   pause_history: any[];
   total_paused_minutes: number;
   expected_start?: string;
+  /** IANA timezone of the SITE — used to render times in the local zone of the object. */
+  site_timezone?: string | null;
   is_grouped: boolean; // Флаг что это группа смен
   shift_segments: ShiftSegment[]; // Детали каждой смены в группе
   auto_pauses: AutoPause[]; // Автопаузы между сменами
@@ -57,6 +60,7 @@ interface BaseShift {
   pause_history?: any[];
   total_paused_minutes?: number;
   expected_start?: string;
+  site_timezone?: string | null;
   auto_ended?: boolean;
   is_overtime?: boolean;
 }
@@ -76,11 +80,13 @@ export function groupShiftsByWorkerSiteDay(shifts: BaseShift[]): GroupedShift[] 
 
   for (let i = 0; i < sorted.length; i++) {
     const shift = sorted[i];
-    
+
     if (processed.has(shift.id)) continue;
 
-    // Ключ группы: работник + объект + день
-    const shiftDate = new Date(shift.started_at).toDateString();
+    // Ключ группы: работник + объект + день. "День" считается в timezone
+    // сайта, а не в зоне браузера — иначе ночные смены на разных объектах
+    // могут попасть не в свой день.
+    const shiftDate = getDayKeyInTz(new Date(shift.started_at), shift.site_timezone ?? null);
     const groupKey = `${shift.user_id}_${shift.site_id}_${shiftDate}`;
 
     // Находим все смены в этой группе
@@ -90,7 +96,7 @@ export function groupShiftsByWorkerSiteDay(shifts: BaseShift[]): GroupedShift[] 
     // Ищем смены на том же объекте в тот же день тем же работником
     for (let j = i + 1; j < sorted.length; j++) {
       const nextShift = sorted[j];
-      const nextDate = new Date(nextShift.started_at).toDateString();
+      const nextDate = getDayKeyInTz(new Date(nextShift.started_at), nextShift.site_timezone ?? null);
       const nextKey = `${nextShift.user_id}_${nextShift.site_id}_${nextDate}`;
 
       // Don't group if current shift was auto_ended and next is overtime
@@ -154,6 +160,7 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
       shift_ids: [shift.id],
       pause_history: history,
       total_paused_minutes: shift.total_paused_minutes || 0,
+      site_timezone: shift.site_timezone ?? null,
       is_grouped: false,
       shift_segments: [],
       auto_pauses: [],
@@ -252,6 +259,7 @@ function createGroupedShift(shifts: BaseShift[]): GroupedShift {
     pause_history: allPauses,
     total_paused_minutes: totalPausedMinutes,
     expected_start: firstShift.expected_start,
+    site_timezone: firstShift.site_timezone ?? null,
     is_grouped: true,
     shift_segments: shiftSegments,
     auto_pauses: autoPauses,
