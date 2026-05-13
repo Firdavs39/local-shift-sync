@@ -214,7 +214,11 @@ const WhoIsOnShift = () => {
     for (const { site, workers } of sitesWithWorkers) {
       for (const w of workers) {
         if (!w.stats.firstStartedAt) continue;
-        if (!firstStarter || w.stats.firstStartedAt < firstStarter.startedAt) {
+        // The "first today" reward goes to the earliest *punctual* worker,
+        // not just the earliest tap on the start button. A late starter is
+        // still a late starter even if no one beat them to it.
+        const isPunctualStart = w.stats.minutesLate === 0 && !w.stats.hasOvertime;
+        if (isPunctualStart && (!firstStarter || w.stats.firstStartedAt < firstStarter.startedAt)) {
           firstStarter = {
             userId: w.userId,
             name: w.fullName,

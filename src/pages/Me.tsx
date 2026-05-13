@@ -900,7 +900,11 @@ const Me = () => {
                   <span className="text-xs text-muted-foreground">{site.name}</span>
                 )}
               </div>
-              {isFirstOfDay && (
+              {/* "First today" is a discipline reward — only show it when the
+                  worker actually arrived on time / early. Being literally the
+                  first to press "Start" while two hours late doesn't deserve
+                  the trophy. */}
+              {isFirstOfDay && stats.minutesLate === 0 && !stats.hasOvertime && (
                 <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
                   <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-500" />
                   <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
