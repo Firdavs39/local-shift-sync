@@ -5,9 +5,9 @@ import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance, type RadiusEvaluation } from '@/lib/geo';
-import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz } from '@/lib/time';
+import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz, getExpectedEndForShift } from '@/lib/time';
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
-import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
+import { pickEffectiveTimes, isWorkDay, type AssignmentOverride } from '@/lib/expected-times';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle, CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -66,6 +66,14 @@ const Me = () => {
   // 2ms apart in prod).
   const [isStartingShift, setIsStartingShift] = useState(false);
   const [isEndingShift, setIsEndingShift] = useState(false);
+  // Pending overtime that needs the worker's confirmation (was forgotten?).
+  const [pendingOvertime, setPendingOvertime] = useState<Array<{
+    id: string;
+    site_id: string;
+    site_name: string;
+    started_at: string;
+    overtime_minutes: number;
+  }>>([]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -109,6 +117,55 @@ const Me = () => {
       .gte('started_at', new Date(earliestMidnight).toISOString())
       .order('started_at', { ascending: true });
     setTodayShifts((data as Shift[]) || []);
+  };
+
+  // Pull shifts with pending overtime that the worker hasn't confirmed yet.
+  // Limited to last 14 days so an old forgotten shift doesn't haunt the UI
+  // forever; the admin can still see/handle older ones in /admin/reports.
+  const refreshPendingOvertime = async () => {
+    if (!user) return;
+    const since = new Date();
+    since.setDate(since.getDate() - 14);
+    const { data } = await supabase
+      .from('shifts')
+      .select('id, site_id, started_at, overtime_minutes, sites!inner(name)')
+      .eq('user_id', user.id)
+      .eq('overtime_status', 'pending')
+      .gte('started_at', since.toISOString())
+      .order('started_at', { ascending: false });
+    const rows = ((data as unknown) as Array<{
+      id: string;
+      site_id: string;
+      started_at: string;
+      overtime_minutes: number;
+      sites: { name: string };
+    }>) || [];
+    setPendingOvertime(rows.map(r => ({
+      id: r.id,
+      site_id: r.site_id,
+      site_name: r.sites?.name ?? '—',
+      started_at: r.started_at,
+      overtime_minutes: r.overtime_minutes,
+    })));
+  };
+
+  const decideOvertime = async (shiftId: string, decision: 'approved' | 'discarded') => {
+    const { error } = await supabase
+      .from('shifts')
+      .update({
+        overtime_status: decision,
+        overtime_decided_by: user.id,
+        overtime_decided_at: new Date().toISOString(),
+      })
+      .eq('id', shiftId);
+    if (error) {
+      toast.error('Не удалось сохранить решение');
+      console.error(error);
+      return;
+    }
+    toast.success(decision === 'approved' ? 'Засчитано как переработка' : 'Не учитываем');
+    refreshPendingOvertime();
+    refreshTodayShifts();
   };
 
   // RPC: is the current user the first shift-starter in their company today?
@@ -174,15 +231,19 @@ const Me = () => {
       if (!user) return;
       const { data, error } = await supabase
         .from('worker_site_assignments')
-        .select('site_id, expected_start, expected_end')
+        .select('site_id, expected_start, expected_end, work_days')
         .eq('user_id', user.id);
       if (error) {
         console.error('Error loading assignments:', error);
         return;
       }
       const map: Record<string, AssignmentOverride> = {};
-      for (const row of (data as unknown as Array<{ site_id: string; expected_start: string | null; expected_end: string | null }>) || []) {
-        map[row.site_id] = { expected_start: row.expected_start, expected_end: row.expected_end };
+      for (const row of (data as unknown as Array<{ site_id: string; expected_start: string | null; expected_end: string | null; work_days: number[] | null }>) || []) {
+        map[row.site_id] = {
+          expected_start: row.expected_start,
+          expected_end: row.expected_end,
+          work_days: row.work_days,
+        };
       }
       setMyAssignments(map);
     };
@@ -226,6 +287,7 @@ const Me = () => {
     loadActiveShift();
     loadTodayShifts();
     loadIsFirstOfDay();
+    refreshPendingOvertime();
 
     // Set up real-time subscription for shifts
     const channel = supabase
@@ -252,6 +314,7 @@ const Me = () => {
 
           loadActiveShift();
           loadTodayShifts();
+          refreshPendingOvertime();
         }
       )
       .subscribe();
@@ -455,6 +518,17 @@ const Me = () => {
     // Guard against rapid double-tap on the start button — without this we
     // saw shift rows in prod created 2ms apart from the same click burst.
     if (isStartingShift) return;
+
+    // Hard schedule check: if the worker has an assignment on this site with
+    // a work_days list, today (in site tz) must be in that list. NULL means
+    // "any day" — preserves back-compat.
+    const siteTzForCheck = selectedSite.timezone || 'UTC';
+    const assignmentForCheck = myAssignments[selectedSite.id];
+    if (assignmentForCheck && !isWorkDay(new Date(), assignmentForCheck.work_days, siteTzForCheck)) {
+      toast.error('Сегодня не ваш рабочий день. Свяжитесь с админом.');
+      return;
+    }
+
     setIsStartingShift(true);
 
     try {
@@ -656,9 +730,46 @@ const Me = () => {
         }
       }
 
+      // Compute the effective expected_end for THIS shift (assignment override
+      // → site default), anchored to started_at's calendar day in site tz so
+      // overnight shifts (22:00 → 02:00) are handled correctly.
+      const effective = pickEffectiveTimes(
+        myAssignments[site.id],
+        { expected_start: site.expected_start, expected_end: site.expected_end, timezone: site.timezone },
+      );
+      const expectedEndInstant = getExpectedEndForShift(
+        new Date(activeShift.started_at),
+        effective.end,
+        site.timezone || 'UTC',
+      );
+
       // Calculate total minutes worked excluding paused time
       const totalMinutes = calculateMinutesWorked(new Date(activeShift.started_at), now);
       const minutesWorked = Math.max(0, totalMinutes - totalPausedMinutes);
+
+      // Overtime = time worked AFTER expected_end (with auto-pauses already
+      // out of the picture — they were subtracted from minutesWorked). If the
+      // worker ended before expected_end → overtime = 0. Tiny <5min overtime
+      // is ignored as accidental "couple-of-minutes-late-clocking-out".
+      const rawOvertimeMinutes = Math.max(
+        0,
+        Math.floor((now.getTime() - expectedEndInstant.getTime()) / 60000),
+      );
+      let overtimeMinutes = 0;
+      let overtimeStatus: 'none' | 'pending' = 'none';
+      if (rawOvertimeMinutes >= 5) {
+        // Cap overtime by minutesWorked — if the shift was almost entirely
+        // paused, we shouldn't count phantom overtime.
+        overtimeMinutes = Math.min(rawOvertimeMinutes, minutesWorked);
+        if (overtimeMinutes >= 5) {
+          overtimeStatus = 'pending';
+        } else {
+          overtimeMinutes = 0;
+        }
+      }
+      // The "regular" minutes_worked we store EXCLUDES overtime — payroll
+      // adds them back only if status='approved'.
+      const regularMinutesWorked = Math.max(0, minutesWorked - overtimeMinutes);
 
       const { error } = await supabase
         .from('shifts')
@@ -666,7 +777,9 @@ const Me = () => {
           ended_at: now.toISOString(),
           end_lat: latitude,
           end_lon: longitude,
-          minutes_worked: minutesWorked,
+          minutes_worked: regularMinutesWorked,
+          overtime_minutes: overtimeMinutes,
+          overtime_status: overtimeStatus,
           is_paused: false,
           paused_at: null,
           total_paused_minutes: totalPausedMinutes,
@@ -838,6 +951,45 @@ const Me = () => {
             </Card>
           );
         })()}
+
+        {/* Pending overtime confirmation — appears for shifts the worker
+            closed (or system auto-closed) with overtime that hasn't been
+            decided yet. */}
+        {pendingOvertime.map(po => (
+          <Card key={po.id} className="p-4 border-2 border-amber-500 bg-amber-500/10 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">⚡</div>
+              <div className="text-sm">
+                <div className="font-semibold text-amber-700 dark:text-amber-400">
+                  Переработка {Math.floor(po.overtime_minutes / 60) > 0 ? `${Math.floor(po.overtime_minutes / 60)} ч ` : ''}{po.overtime_minutes % 60} мин
+                </div>
+                <div className="text-muted-foreground text-xs mt-1">
+                  Объект «{po.site_name}», смена за {formatDate(new Date(po.started_at))}
+                </div>
+                <div className="text-muted-foreground text-xs mt-1">
+                  Засчитать как доп. время или это вы забыли выключить смену?
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => decideOvertime(po.id, 'approved')}
+              >
+                ✅ Засчитать
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => decideOvertime(po.id, 'discarded')}
+              >
+                ❌ Забыл выключить
+              </Button>
+            </div>
+          </Card>
+        ))}
 
         {/* My Shifts Button */}
         <Button

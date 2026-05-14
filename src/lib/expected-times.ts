@@ -15,6 +15,37 @@ export interface SiteDefaults {
 export interface AssignmentOverride {
   expected_start: string | null;
   expected_end: string | null;
+  /** ISO day-of-week (1=Mon..7=Sun). null/empty = "any day". */
+  work_days?: number[] | null;
+}
+
+/**
+ * Convert a Date to its ISO day-of-week (1=Mon..7=Sun) in the given timezone.
+ * Native `Date.getDay()` returns 0-6 with Sunday=0; we map to ISO and also let
+ * the caller specify the site's tz so a Tashkent late-night shift is bucketed
+ * by Tashkent's day, not the server's.
+ */
+export function isoDayOfWeekInTz(date: Date, timezone?: string | null): number {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || undefined,
+    weekday: 'short',
+  });
+  const wd = fmt.format(date); // 'Mon' | 'Tue' | ...
+  const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+  return map[wd] ?? 1;
+}
+
+/**
+ * True if the given calendar day (in site tz) is included in the worker's
+ * assignment schedule. A NULL/empty work_days array means "any day".
+ */
+export function isWorkDay(
+  date: Date,
+  workDays: number[] | null | undefined,
+  timezone?: string | null,
+): boolean {
+  if (!workDays || workDays.length === 0) return true;
+  return workDays.includes(isoDayOfWeekInTz(date, timezone));
 }
 
 export interface EffectiveTimes {

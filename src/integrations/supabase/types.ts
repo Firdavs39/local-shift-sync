@@ -169,45 +169,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["api_key_status"]
         }
         Relationships: [
-          {
-            foreignKeyName: "api_keys_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "api_keys_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "api_keys_rotated_to_fkey"
-            columns: ["rotated_to"]
-            isOneToOne: false
-            referencedRelation: "api_keys"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "api_keys_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+          { foreignKeyName: "api_keys_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "api_keys_rotated_to_fkey"; columns: ["rotated_to"]; isOneToOne: false; referencedRelation: "api_keys"; referencedColumns: ["id"] },
         ]
       }
       bot_api_secrets: {
-        Row: {
-          created_at: string
-          id: number
-          pepper: string
-        }
-        Insert: {
-          created_at?: string
-          id?: number
-          pepper: string
-        }
-        Update: {
-          created_at?: string
-          id?: number
-          pepper?: string
-        }
+        Row: { created_at: string; id: number; pepper: string }
+        Insert: { created_at?: string; id?: number; pepper: string }
+        Update: { created_at?: string; id?: number; pepper?: string }
         Relationships: []
       }
       companies: {
@@ -284,13 +254,7 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "profiles_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "profiles_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
         ]
       }
       rate_limit_buckets: {
@@ -322,13 +286,7 @@ export type Database = {
           tokens?: number
         }
         Relationships: [
-          {
-            foreignKeyName: "rate_limit_buckets_key_id_fkey"
-            columns: ["key_id"]
-            isOneToOne: true
-            referencedRelation: "api_keys"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "rate_limit_buckets_key_id_fkey"; columns: ["key_id"]; isOneToOne: true; referencedRelation: "api_keys"; referencedColumns: ["id"] },
         ]
       }
       settings: {
@@ -357,13 +315,7 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "settings_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "settings_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
         ]
       }
       shifts: {
@@ -379,6 +331,10 @@ export type Database = {
           is_paused: boolean | null
           minutes_late: number
           minutes_worked: number | null
+          overtime_decided_at: string | null
+          overtime_decided_by: string | null
+          overtime_minutes: number
+          overtime_status: string
           pause_history: Json | null
           paused_at: string | null
           site_id: string
@@ -401,6 +357,10 @@ export type Database = {
           is_paused?: boolean | null
           minutes_late?: number
           minutes_worked?: number | null
+          overtime_decided_at?: string | null
+          overtime_decided_by?: string | null
+          overtime_minutes?: number
+          overtime_status?: string
           pause_history?: Json | null
           paused_at?: string | null
           site_id: string
@@ -423,6 +383,10 @@ export type Database = {
           is_paused?: boolean | null
           minutes_late?: number
           minutes_worked?: number | null
+          overtime_decided_at?: string | null
+          overtime_decided_by?: string | null
+          overtime_minutes?: number
+          overtime_status?: string
           pause_history?: Json | null
           paused_at?: string | null
           site_id?: string
@@ -434,20 +398,9 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "shifts_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "shifts_site_id_fkey"
-            columns: ["site_id"]
-            isOneToOne: false
-            referencedRelation: "sites"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "shifts_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+          { foreignKeyName: "shifts_overtime_decided_by_fkey"; columns: ["overtime_decided_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "shifts_site_id_fkey"; columns: ["site_id"]; isOneToOne: false; referencedRelation: "sites"; referencedColumns: ["id"] },
         ]
       }
       sites: {
@@ -494,13 +447,7 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "sites_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "sites_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
         ]
       }
       telegram_config: {
@@ -529,13 +476,7 @@ export type Database = {
           notify_late?: boolean
         }
         Relationships: [
-          {
-            foreignKeyName: "telegram_config_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: true
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "telegram_config_company_id_fkey"; columns: ["company_id"]; isOneToOne: true; referencedRelation: "companies"; referencedColumns: ["id"] },
         ]
       }
       user_roles: {
@@ -558,13 +499,7 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "user_roles_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "user_roles_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
         ]
       }
       worker_site_assignments: {
@@ -577,6 +512,7 @@ export type Database = {
           site_id: string
           updated_at: string
           user_id: string
+          work_days: number[] | null
         }
         Insert: {
           company_id: string
@@ -587,6 +523,7 @@ export type Database = {
           site_id: string
           updated_at?: string
           user_id: string
+          work_days?: number[] | null
         }
         Update: {
           company_id?: string
@@ -597,29 +534,12 @@ export type Database = {
           site_id?: string
           updated_at?: string
           user_id?: string
+          work_days?: number[] | null
         }
         Relationships: [
-          {
-            foreignKeyName: "worker_site_assignments_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "worker_site_assignments_site_id_fkey"
-            columns: ["site_id"]
-            isOneToOne: false
-            referencedRelation: "sites"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "worker_site_assignments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "worker_site_assignments_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+          { foreignKeyName: "worker_site_assignments_site_id_fkey"; columns: ["site_id"]; isOneToOne: false; referencedRelation: "sites"; referencedColumns: ["id"] },
+          { foreignKeyName: "worker_site_assignments_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
     }
@@ -631,42 +551,22 @@ export type Database = {
       cleanup_audit_log: { Args: never; Returns: number }
       consume_rate_limit_token: {
         Args: { p_cost?: number; p_key_id: string }
-        Returns: {
-          allowed: boolean
-          retry_after: number
-          tokens_left: number
-        }[]
+        Returns: { allowed: boolean; retry_after: number; tokens_left: number }[]
       }
       count_active_api_keys: { Args: { p_company_id: string }; Returns: number }
       get_api_key_pepper: { Args: never; Returns: string }
       get_api_tier_limits: {
         Args: { p_company_id: string }
-        Returns: {
-          audit_days: number
-          daily_quota: number
-          max_keys: number
-          rate_limit_rpm: number
-        }[]
+        Returns: { audit_days: number; daily_quota: number; max_keys: number; rate_limit_rpm: number }[]
       }
       get_my_company_id: { Args: never; Returns: string }
       has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
+        Args: { _role: Database["public"]["Enums"]["app_role"]; _user_id: string }
         Returns: boolean
       }
       lookup_api_key: {
         Args: { p_key_hash: string }
-        Returns: {
-          company_id: string
-          daily_quota: number
-          expired: boolean
-          id: string
-          ip_allowlist: unknown[]
-          rate_limit_rpm: number
-          scopes: string[]
-        }[]
+        Returns: { company_id: string; daily_quota: number; expired: boolean; id: string; ip_allowlist: unknown[]; rate_limit_rpm: number; scopes: string[] }[]
       }
       purge_old_revoked_keys: { Args: never; Returns: number }
     }
@@ -816,21 +716,9 @@ export const Constants = {
         "scope_changed",
         "renamed",
       ],
-      api_key_status: [
-        "active",
-        "revoked",
-        "purged",
-      ],
-      app_role: [
-        "admin",
-        "worker",
-      ],
-      shift_status: [
-        "early",
-        "on_time",
-        "late",
-        "offsite",
-      ],
+      api_key_status: ["active", "revoked", "purged"],
+      app_role: ["admin", "worker"],
+      shift_status: ["early", "on_time", "late", "offsite"],
     },
   },
 } as const

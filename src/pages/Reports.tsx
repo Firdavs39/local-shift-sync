@@ -29,6 +29,8 @@ interface ShiftReport {
   total_paused_minutes?: number;
   expected_start?: string;
   site_timezone?: string | null;
+  overtime_minutes?: number;
+  overtime_status?: string;
 }
 
 const PAGE_SIZE = 50;
@@ -78,7 +80,9 @@ const Reports = () => {
           minutes_late,
           minutes_worked,
           pause_history,
-          total_paused_minutes
+          total_paused_minutes,
+          overtime_minutes,
+          overtime_status
         `)
         .gte('started_at', start.toISOString())
         .lte('started_at', end.toISOString())
@@ -246,6 +250,7 @@ const Reports = () => {
                           <TableHead>Выходы за радиус</TableHead>
                           <TableHead>Макс отсутствие</TableHead>
                           <TableHead>Отработано</TableHead>
+                          <TableHead>Переработка</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -331,6 +336,28 @@ const Reports = () => {
                               {shift.minutes_worked
                                 ? `${Math.floor(shift.minutes_worked / 60)}ч ${shift.minutes_worked % 60}м`
                                 : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {/* Approved + pending overtime, amber. Discarded hidden by design. */}
+                              {(() => {
+                                const approved = shift.overtime_minutes_approved ?? 0;
+                                const pending = shift.overtime_minutes_pending ?? 0;
+                                if (approved === 0 && pending === 0) return '-';
+                                return (
+                                  <div className="flex flex-col gap-0.5 text-xs">
+                                    {approved > 0 && (
+                                      <span className="text-amber-600 font-medium">
+                                        ⚡ {Math.floor(approved / 60) > 0 ? `${Math.floor(approved / 60)}ч ` : ''}{approved % 60}м
+                                      </span>
+                                    )}
+                                    {pending > 0 && (
+                                      <span className="text-amber-600/70 italic">
+                                        ⚡ {Math.floor(pending / 60) > 0 ? `${Math.floor(pending / 60)}ч ` : ''}{pending % 60}м (ждёт)
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </TableCell>
                           </TableRow>
                         ))}

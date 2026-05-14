@@ -54,8 +54,27 @@ interface Assignment {
   site_id: string;
   expected_start: string | null;
   expected_end: string | null;
+  /** ISO day-of-week numbers (1=Mon..7=Sun). null/empty = any day. */
+  work_days: number[] | null;
   // joined
   worker_name?: string;
+}
+
+const DAY_LABELS: { iso: number; short: string }[] = [
+  { iso: 1, short: 'Пн' },
+  { iso: 2, short: 'Вт' },
+  { iso: 3, short: 'Ср' },
+  { iso: 4, short: 'Чт' },
+  { iso: 5, short: 'Пт' },
+  { iso: 6, short: 'Сб' },
+  { iso: 7, short: 'Вс' },
+];
+
+/** Compact "Пн-Пт" / "Пн, Ср, Пт" / "каждый день" formatter for the days list. */
+function formatWorkDays(days: number[] | null | undefined): string {
+  if (!days || days.length === 0 || days.length === 7) return 'каждый день';
+  const sorted = [...days].sort((a, b) => a - b);
+  return sorted.map(d => DAY_LABELS.find(x => x.iso === d)?.short ?? d).join(', ');
 }
 
 const SitesManagement = () => {
@@ -99,10 +118,16 @@ const SitesManagement = () => {
   const [assignmentsBySite, setAssignmentsBySite] = useState<Record<string, Assignment[]>>({});
   const [workers, setWorkers] = useState<WorkerOption[]>([]);
   const [assignDialogSite, setAssignDialogSite] = useState<Site | null>(null);
-  const [newAssignment, setNewAssignment] = useState({
+  const [newAssignment, setNewAssignment] = useState<{
+    userId: string;
+    expectedStart: string;
+    expectedEnd: string;
+    workDays: number[]; // empty = "any day"
+  }>({
     userId: '',
     expectedStart: '',
     expectedEnd: '',
+    workDays: [1, 2, 3, 4, 5, 6, 7],
   });
 
   // Helper: request geolocation with multi-sample accuracy and typed error reason
@@ -205,7 +230,7 @@ const SitesManagement = () => {
   const loadAssignments = async () => {
     const { data, error } = await supabase
       .from('worker_site_assignments')
-      .select('id, user_id, site_id, expected_start, expected_end');
+      .select('id, user_id, site_id, expected_start, expected_end, work_days');
     if (error) {
       console.error('Error loading assignments:', error);
       return;
@@ -245,19 +270,24 @@ const SitesManagement = () => {
       userId: '',
       expectedStart: site.expected_start,
       expectedEnd: site.expected_end,
+      workDays: [1, 2, 3, 4, 5, 6, 7],
     });
     if (workers.length === 0) loadWorkers();
   };
 
   const closeAssignDialog = () => {
     setAssignDialogSite(null);
-    setNewAssignment({ userId: '', expectedStart: '', expectedEnd: '' });
+    setNewAssignment({ userId: '', expectedStart: '', expectedEnd: '', workDays: [1, 2, 3, 4, 5, 6, 7] });
   };
 
   const handleAddAssignment = async () => {
     if (!assignDialogSite) return;
     if (!newAssignment.userId) {
       toast.error('Выберите сотрудника');
+      return;
+    }
+    if (newAssignment.workDays.length === 0) {
+      toast.error('Выберите хотя бы один рабочий день');
       return;
     }
     // Empty inputs map to NULL → site defaults are used.
@@ -270,6 +300,12 @@ const SitesManagement = () => {
       return;
     }
 
+    // work_days: all 7 days = NULL (no schedule restriction, back-compat).
+    // Empty array doesn't make sense — UI prevents it (warn below).
+    const workDaysToStore = newAssignment.workDays.length === 7
+      ? null
+      : [...newAssignment.workDays].sort((a, b) => a - b);
+
     const { error } = await supabase
       .from('worker_site_assignments')
       .insert({
@@ -278,6 +314,7 @@ const SitesManagement = () => {
         site_id: assignDialogSite.id,
         expected_start: expectedStart,
         expected_end: expectedEnd,
+        work_days: workDaysToStore,
       });
 
     if (error) {
@@ -299,10 +336,23 @@ const SitesManagement = () => {
     loadAssignments();
   };
 
-  const handleUpdateAssignment = async (assignmentId: string, expectedStart: string | null, expectedEnd: string | null) => {
+  const handleUpdateAssignment = async (
+    assignmentId: string,
+    expectedStart: string | null,
+    expectedEnd: string | null,
+    workDays?: number[] | null,
+  ) => {
+    const payload: { expected_start: string | null; expected_end: string | null; work_days?: number[] | null } = {
+      expected_start: expectedStart,
+      expected_end: expectedEnd,
+    };
+    if (workDays !== undefined) {
+      // 7 days selected → store NULL (back-compat shorthand)
+      payload.work_days = workDays && workDays.length === 7 ? null : (workDays && workDays.length > 0 ? [...workDays].sort((a, b) => a - b) : null);
+    }
     const { error } = await supabase
       .from('worker_site_assignments')
-      .update({ expected_start: expectedStart, expected_end: expectedEnd })
+      .update(payload)
       .eq('id', assignmentId);
     if (error) {
       console.error('Error updating assignment:', error);
@@ -662,7 +712,8 @@ const SitesManagement = () => {
                           <div key={a.id} className="flex items-center justify-between gap-2">
                             <span className="font-medium">{a.worker_name}</span>
                             <span className={isDefault ? 'text-muted-foreground' : ''}>
-                              {start}–{end}{isDefault && ' (по умолчанию)'}
+                              {start}–{end} · {formatWorkDays(a.work_days)}
+                              {isDefault && ' (по умолчанию)'}
                             </span>
                           </div>
                         );
@@ -710,43 +761,79 @@ const SitesManagement = () => {
                 Никто пока не назначен на этот объект.
               </p>
             )}
-            {(assignDialogSite ? assignmentsBySite[assignDialogSite.id] || [] : []).map((a) => (
-              <div key={a.id} className="flex items-center gap-2 p-3 rounded-md border">
-                <div className="flex-1 text-sm font-medium">{a.worker_name}</div>
-                <Input
-                  type="time"
-                  value={a.expected_start ?? ''}
-                  placeholder={assignDialogSite?.expected_start}
-                  className="w-28"
-                  onBlur={(e) => {
-                    const v = e.target.value || null;
-                    if (v !== (a.expected_start ?? null)) {
-                      handleUpdateAssignment(a.id, v, a.expected_end);
-                    }
-                  }}
-                />
-                <Input
-                  type="time"
-                  value={a.expected_end ?? ''}
-                  placeholder={assignDialogSite?.expected_end}
-                  className="w-28"
-                  onBlur={(e) => {
-                    const v = e.target.value || null;
-                    if (v !== (a.expected_end ?? null)) {
-                      handleUpdateAssignment(a.id, a.expected_start, v);
-                    }
-                  }}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDeleteAssignment(a.id)}
-                  className="text-destructive"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
+            {(assignDialogSite ? assignmentsBySite[assignDialogSite.id] || [] : []).map((a) => {
+              const currentDays: number[] = a.work_days && a.work_days.length > 0
+                ? a.work_days
+                : [1, 2, 3, 4, 5, 6, 7];
+              return (
+                <div key={a.id} className="p-3 rounded-md border space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 text-sm font-medium">{a.worker_name}</div>
+                    <Input
+                      type="time"
+                      value={a.expected_start ?? ''}
+                      placeholder={assignDialogSite?.expected_start}
+                      className="w-28"
+                      onBlur={(e) => {
+                        const v = e.target.value || null;
+                        if (v !== (a.expected_start ?? null)) {
+                          handleUpdateAssignment(a.id, v, a.expected_end);
+                        }
+                      }}
+                    />
+                    <Input
+                      type="time"
+                      value={a.expected_end ?? ''}
+                      placeholder={assignDialogSite?.expected_end}
+                      className="w-28"
+                      onBlur={(e) => {
+                        const v = e.target.value || null;
+                        if (v !== (a.expected_end ?? null)) {
+                          handleUpdateAssignment(a.id, a.expected_start, v);
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteAssignment(a.id)}
+                      className="text-destructive"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <span className="text-xs text-muted-foreground mr-1">Дни:</span>
+                    {DAY_LABELS.map(({ iso, short }) => {
+                      const selected = currentDays.includes(iso);
+                      return (
+                        <button
+                          key={iso}
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                            selected
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                          }`}
+                          onClick={() => {
+                            const next = selected
+                              ? currentDays.filter(d => d !== iso)
+                              : [...currentDays, iso];
+                            if (next.length === 0) {
+                              toast.error('Должен быть хотя бы один рабочий день');
+                              return;
+                            }
+                            handleUpdateAssignment(a.id, a.expected_start, a.expected_end, next);
+                          }}
+                        >
+                          {short}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="pt-4 border-t space-y-3">
@@ -786,6 +873,35 @@ const SitesManagement = () => {
                   value={newAssignment.expectedEnd}
                   onChange={(e) => setNewAssignment({ ...newAssignment, expectedEnd: e.target.value })}
                 />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Рабочие дни</Label>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {DAY_LABELS.map(({ iso, short }) => {
+                  const selected = newAssignment.workDays.includes(iso);
+                  return (
+                    <button
+                      key={iso}
+                      type="button"
+                      className={`text-xs px-2.5 py-1.5 rounded border transition-colors ${
+                        selected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                      }`}
+                      onClick={() => {
+                        setNewAssignment({
+                          ...newAssignment,
+                          workDays: selected
+                            ? newAssignment.workDays.filter(d => d !== iso)
+                            : [...newAssignment.workDays, iso],
+                        });
+                      }}
+                    >
+                      {short}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

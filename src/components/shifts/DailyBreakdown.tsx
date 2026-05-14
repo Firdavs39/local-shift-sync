@@ -29,6 +29,8 @@ interface DayStats {
   pausedMinutes?: number;
   outOfRadiusCount?: number;
   longestAbsenceMinutes?: number;
+  overtimeApprovedMinutes?: number;
+  overtimePendingMinutes?: number;
 }
 
 interface DailyBreakdownProps {
@@ -105,6 +107,27 @@ export function DailyBreakdown({ dailyBreakdown }: DailyBreakdownProps) {
                   <span className="text-muted-foreground">Макс отсутствие:</span>
                   <span className="font-medium text-orange-500">
                     {day.dayStats.longestAbsenceMinutes} мин
+                  </span>
+                </div>
+              )}
+
+              {day.dayStats.overtimeApprovedMinutes !== undefined && day.dayStats.overtimeApprovedMinutes > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-500">⚡</span>
+                  <span className="text-muted-foreground">Переработка:</span>
+                  <span className="font-medium text-amber-600">
+                    {Math.floor(day.dayStats.overtimeApprovedMinutes / 60) > 0 && `${Math.floor(day.dayStats.overtimeApprovedMinutes / 60)} ч `}
+                    {day.dayStats.overtimeApprovedMinutes % 60} мин
+                  </span>
+                </div>
+              )}
+              {day.dayStats.overtimePendingMinutes !== undefined && day.dayStats.overtimePendingMinutes > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-500">⚡</span>
+                  <span className="text-muted-foreground">Ждёт подтверждения:</span>
+                  <span className="font-medium text-amber-500 italic">
+                    {Math.floor(day.dayStats.overtimePendingMinutes / 60) > 0 && `${Math.floor(day.dayStats.overtimePendingMinutes / 60)} ч `}
+                    {day.dayStats.overtimePendingMinutes % 60} мин
                   </span>
                 </div>
               )}
