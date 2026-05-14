@@ -16,6 +16,7 @@ import WorkerDetails from "./pages/WorkerDetails";
 import MyShifts from "./pages/MyShifts";
 import Settings from "./pages/Settings";
 import Register from "./pages/Register";
+import Privacy from "./pages/Privacy";
 import Billing from "./pages/Billing";
 import TelegramSettings from "./pages/TelegramSettings";
 import ApiKeys from "./pages/ApiKeys";
@@ -36,6 +37,7 @@ function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/privacy" element={<Privacy />} />
 
           {/* Worker */}
           <Route path="/me" element={
