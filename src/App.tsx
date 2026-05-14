@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { installRealtimeResume } from "@/lib/realtime-resume";
 import Welcome from "./pages/Welcome";
 import Auth from "./pages/Auth";
 import Me from "./pages/Me";
@@ -23,6 +25,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function App() {
+  useEffect(() => installRealtimeResume(), []);
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
