@@ -422,12 +422,36 @@ const Me = () => {
       }
     };
 
-    // Check location every 30 seconds
-    const interval = setInterval(monitorLocation, 30000);
-    // Initial check
-    monitorLocation();
+    // Polling cadence depends on tab visibility:
+    //   * visible (worker has the app open) → 30s, snappy auto-pause/resume.
+    //   * hidden (browser, screen off / tab swapped) → 5 min, since the browser
+    //     throttles setInterval and accurate GPS isn't reliable anyway.
+    // The proper "shift tracking with the screen off" story is solved by the
+    // native build (Capacitor + @capacitor-community/background-geolocation);
+    // this is only the web fallback.
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const restartInterval = () => {
+      if (interval) clearInterval(interval);
+      const ms = document.visibilityState === 'hidden' ? 5 * 60 * 1000 : 30 * 1000;
+      interval = setInterval(monitorLocation, ms);
+    };
+    restartInterval();
+    monitorLocation(); // initial check
 
-    return () => clearInterval(interval);
+    const onVisibilityChange = () => {
+      restartInterval();
+      if (document.visibilityState === 'visible') {
+        // Coming back to foreground — re-check immediately rather than waiting
+        // for the next tick. Worker may have walked away and back.
+        monitorLocation();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      if (interval) clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [activeShift, sites, accuracyCapM]);
 
   // Manual pause: user presses "Пауза"
