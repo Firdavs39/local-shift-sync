@@ -38,4 +38,23 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Location: foreground + background for shift tracking with screen off -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Foreground service so location keeps running when app is backgrounded.
+         FOREGROUND_SERVICE_LOCATION is required from Android 14 (API 34). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Persistent notification "Смена идёт" on Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Keep CPU awake while tracking; survive reboot if a shift was active -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- GPS hardware hint (helps Play listing; not strictly required) -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>
