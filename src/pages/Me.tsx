@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { getCurrentUser, logout } from '@/lib/supabase-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance, type RadiusEvaluation } from '@/lib/geo';
+import { startShiftTracker, type TrackerHandle, type TrackerLocation } from '@/lib/shift-tracker';
 import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz, getExpectedEndForShift } from '@/lib/time';
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
 import { pickEffectiveTimes, isWorkDay, type AssignmentOverride } from '@/lib/expected-times';
@@ -336,27 +337,29 @@ const Me = () => {
 
   // Monitor location during active shift — only handles AUTO pause/resume.
   // Manual pauses are not affected by location.
+  //
+  // Web: visibility-aware setInterval inside startShiftTracker.
+  // Native: persistent foreground service via @capacitor-community/background-geolocation.
+  // Both modes call the same `handleLocation` here, so the auto-pause /
+  // auto-resume logic doesn't care which mode is in effect.
   useEffect(() => {
     if (!activeShift || activeShift.ended_at) return;
 
-    const monitorLocation = async () => {
-      try {
-        // Take up to 2 samples (5-7s) to avoid acting on a single bad fix
-        const pos = await getCurrentPositionAccurate({ targetAccuracyM: 30, maxSamples: 2, timeoutMs: 7000 });
-        setUserLocation({ lat: pos.lat, lon: pos.lon, accuracy: pos.accuracy });
-        setGpsAccuracy(pos.accuracy);
+    const site = sites.find(s => s.id === activeShift.site_id);
+    if (!site) return;
 
-        // Find the site for this shift
-        const site = sites.find(s => s.id === activeShift.site_id);
-        if (!site) return;
+    const handleLocation = async ({ lat, lon, accuracy }: TrackerLocation) => {
+      try {
+        setUserLocation({ lat, lon, accuracy });
+        setGpsAccuracy(accuracy);
 
         // Don't act on garbage GPS — cell-only fixes can be ±500m
-        if (pos.accuracy > 150) {
-          console.log('[monitor] skipping action: GPS accuracy too poor:', pos.accuracy);
+        if (accuracy > 150) {
+          console.log('[monitor] skipping action: GPS accuracy too poor:', accuracy);
           return;
         }
 
-        const evaluation = evaluateRadius(pos.lat, pos.lon, site.lat, site.lon, site.radius_m, pos.accuracy, accuracyCapM);
+        const evaluation = evaluateRadius(lat, lon, site.lat, site.lon, site.radius_m, accuracy, accuracyCapM);
         const pauseReason = getCurrentPauseReason(activeShift);
 
         // 'uncertain' = sitting on the radius edge → don't toggle pause state (anti-flicker)
@@ -422,12 +425,34 @@ const Me = () => {
       }
     };
 
-    // Check location every 30 seconds
-    const interval = setInterval(monitorLocation, 30000);
-    // Initial check
-    monitorLocation();
+    // Web: startShiftTracker runs a visibility-aware setInterval internally
+    // (30s visible / 5min hidden). Native: it registers a background-geolocation
+    // watcher with a persistent foreground service. Either way handleLocation
+    // gets the fixes. The pwa-hygiene visibility logic now lives inside
+    // shift-tracker.ts (web mode), so it isn't duplicated here.
+    let handle: TrackerHandle | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const h = await startShiftTracker({
+          siteName: site.name,
+          onLocation: handleLocation,
+          onError: (err) => console.warn('[shift-tracker]', err),
+        });
+        if (cancelled) {
+          h.stop();
+        } else {
+          handle = h;
+        }
+      } catch (err) {
+        console.error('[shift-tracker] start failed:', err);
+      }
+    })();
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      handle?.stop().catch((err) => console.warn('[shift-tracker] stop failed:', err));
+    };
   }, [activeShift, sites, accuracyCapM]);
 
   // Manual pause: user presses "Пауза"

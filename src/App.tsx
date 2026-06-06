@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { installRealtimeResume } from "@/lib/realtime-resume";
 import Welcome from "./pages/Welcome";
 import Auth from "./pages/Auth";
 import Me from "./pages/Me";
@@ -14,6 +16,7 @@ import WorkerDetails from "./pages/WorkerDetails";
 import MyShifts from "./pages/MyShifts";
 import Settings from "./pages/Settings";
 import Register from "./pages/Register";
+import Privacy from "./pages/Privacy";
 import Billing from "./pages/Billing";
 import TelegramSettings from "./pages/TelegramSettings";
 import ApiKeys from "./pages/ApiKeys";
@@ -23,6 +26,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function App() {
+  useEffect(() => installRealtimeResume(), []);
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -33,6 +37,7 @@ function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/privacy" element={<Privacy />} />
 
           {/* Worker */}
           <Route path="/me" element={
