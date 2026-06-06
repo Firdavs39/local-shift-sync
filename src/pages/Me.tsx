@@ -425,6 +425,11 @@ const Me = () => {
       }
     };
 
+    // Web: startShiftTracker runs a visibility-aware setInterval internally
+    // (30s visible / 5min hidden). Native: it registers a background-geolocation
+    // watcher with a persistent foreground service. Either way handleLocation
+    // gets the fixes. The pwa-hygiene visibility logic now lives inside
+    // shift-tracker.ts (web mode), so it isn't duplicated here.
     let handle: TrackerHandle | null = null;
     let cancelled = false;
     (async () => {
