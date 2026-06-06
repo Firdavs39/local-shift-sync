@@ -33,6 +33,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Receives OS geofence ENTER/EXIT transitions, even when the app is
+             killed. Registered by GeofencePlugin via a PendingIntent. -->
+        <receiver
+            android:name=".GeofenceBroadcastReceiver"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->

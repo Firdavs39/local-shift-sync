@@ -10,6 +10,7 @@ import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinute
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
 import { pickEffectiveTimes, isWorkDay, type AssignmentOverride } from '@/lib/expected-times';
 import { decideAutoStart } from '@/lib/auto-attendance';
+import { registerGeofences, clearGeofences } from '@/lib/geofence';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle, CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -539,6 +540,25 @@ const Me = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, activeShift, autoAttendance, sites, myAssignments, accuracyCapM]);
+
+  // Register OS-level geofences for assigned sites (native only). This is what
+  // gives the worker a system notification "Вы пришли на объект" even when the
+  // app is fully killed — the native receiver posts it without any JS running.
+  // When the app is open, the ambient watcher above does the actual auto-start.
+  // No-op on web.
+  useEffect(() => {
+    if (!user) return;
+    const assigned = sites.filter(s => myAssignments[s.id]);
+    if (!autoAttendance || assigned.length === 0) {
+      clearGeofences();
+      return;
+    }
+    registerGeofences(
+      assigned.map(s => ({ id: s.id, latitude: s.lat, longitude: s.lon, radius: s.radius_m })),
+    );
+    // Intentionally NOT clearing on unmount — geofences must persist across
+    // app teardown for the killed-state notification to fire.
+  }, [user, autoAttendance, sites, myAssignments]);
 
   // Manual pause: user presses "Пауза"
   const handlePauseShift = async () => {
