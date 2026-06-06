@@ -346,6 +346,51 @@ const Me = () => {
     return last.reason === 'manual' ? 'manual' : 'auto';
   };
 
+  // Atomically mutate a shift's pause state. Reads the FRESH row from the DB
+  // first — NEVER trusts React's possibly-stale activeShift.pause_history.
+  // The stale snapshot caused lost pause events: a quick pause→resume→pause
+  // wrote `[...staleHistory, new]` and overwrote earlier entries, so radius
+  // exits were undercounted and off-site time was lost. `mutate` returns the
+  // fields to UPDATE, or null to no-op. On success, refreshes local state.
+  const applyPauseMutation = async (
+    shiftId: string,
+    mutate: (fresh: {
+      pause_history: any[];
+      total_paused_minutes: number;
+      is_paused: boolean;
+      paused_at: string | null;
+    }) => Record<string, unknown> | null,
+  ): Promise<boolean> => {
+    const { data: fresh, error: readErr } = await supabase
+      .from('shifts')
+      .select('pause_history, total_paused_minutes, is_paused, paused_at')
+      .eq('id', shiftId)
+      .single();
+    if (readErr || !fresh) {
+      console.error('[pause] read failed:', readErr);
+      return false;
+    }
+    const update = mutate({
+      pause_history: Array.isArray(fresh.pause_history) ? (fresh.pause_history as any[]) : [],
+      total_paused_minutes: fresh.total_paused_minutes ?? 0,
+      is_paused: fresh.is_paused ?? false,
+      paused_at: fresh.paused_at ?? null,
+    });
+    if (!update) return false; // mutate decided it's a no-op
+    const { data: updated, error: updErr } = await supabase
+      .from('shifts')
+      .update(update)
+      .eq('id', shiftId)
+      .select()
+      .single();
+    if (updErr) {
+      console.error('[pause] update failed:', updErr);
+      return false;
+    }
+    if (updated) setActiveShift(updated as Shift);
+    return true;
+  };
+
   // Monitor location during active shift — only handles AUTO pause/resume.
   // Manual pauses are not affected by location.
   //
@@ -379,21 +424,19 @@ const Me = () => {
           return;
         }
 
-        // Case 1: definitely outside AND not paused → auto-pause
+        // Case 1: definitely outside AND not paused → auto-pause.
+        // Atomic on fresh DB state so we never overwrite earlier pause events.
         if (evaluation.verdict === 'outside' && !activeShift.is_paused) {
-          const now = new Date().toISOString();
-          const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
-
-          const { error } = await supabase
-            .from('shifts')
-            .update({
+          const ok = await applyPauseMutation(activeShift.id, (fresh) => {
+            if (fresh.is_paused) return null; // already paused — no duplicate event
+            const nowIso = new Date().toISOString();
+            return {
               is_paused: true,
-              paused_at: now,
-              pause_history: [...pauseHistory, { paused_at: now, reason: 'auto' }],
-            })
-            .eq('id', activeShift.id);
-
-          if (!error) {
+              paused_at: nowIso,
+              pause_history: [...fresh.pause_history, { paused_at: nowIso, reason: 'auto' }],
+            };
+          });
+          if (ok) {
             toast.warning('⚠️ Вы вышли из зоны объекта. Смена приостановлена автоматически.', {
               duration: 6000,
             });
@@ -404,31 +447,29 @@ const Me = () => {
         // Case 2: definitely inside radius AND currently on AUTO pause → auto-resume
         // (manual pauses are NOT auto-resumed — user must press the button)
         if (evaluation.verdict === 'inside' && activeShift.is_paused && pauseReason === 'auto') {
-          const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
-          const lastPause = pauseHistory[pauseHistory.length - 1];
-
-          if (lastPause && !lastPause.resumed_at) {
-            const now = new Date();
-            const pausedAt = new Date(activeShift.paused_at!);
-            const pausedMinutes = Math.max(0, Math.floor((now.getTime() - pausedAt.getTime()) / 60000));
-            lastPause.resumed_at = now.toISOString();
-            lastPause.duration_minutes = pausedMinutes;
-
-            const { error } = await supabase
-              .from('shifts')
-              .update({
-                is_paused: false,
-                paused_at: null,
-                total_paused_minutes: (activeShift.total_paused_minutes || 0) + pausedMinutes,
-                pause_history: pauseHistory,
-              })
-              .eq('id', activeShift.id);
-
-            if (!error) {
-              toast.success('✅ Вы вернулись в зону объекта. Смена автоматически возобновлена.', {
-                duration: 6000,
-              });
-            }
+          const ok = await applyPauseMutation(activeShift.id, (fresh) => {
+            if (!fresh.is_paused || !fresh.paused_at) return null;
+            const hist = [...fresh.pause_history];
+            const lastIdx = hist.length - 1;
+            const last = lastIdx >= 0 ? { ...hist[lastIdx] } : null;
+            // Only close an OPEN, AUTO pause.
+            if (!last || last.resumed_at || (last.reason && last.reason !== 'auto')) return null;
+            const nowD = new Date();
+            const mins = Math.max(0, Math.floor((nowD.getTime() - new Date(fresh.paused_at).getTime()) / 60000));
+            last.resumed_at = nowD.toISOString();
+            last.duration_minutes = mins;
+            hist[lastIdx] = last;
+            return {
+              is_paused: false,
+              paused_at: null,
+              total_paused_minutes: fresh.total_paused_minutes + mins,
+              pause_history: hist,
+            };
+          });
+          if (ok) {
+            toast.success('✅ Вы вернулись в зону объекта. Смена автоматически возобновлена.', {
+              duration: 6000,
+            });
           }
         }
       } catch (error) {
@@ -560,27 +601,20 @@ const Me = () => {
     // app teardown for the killed-state notification to fire.
   }, [user, autoAttendance, sites, myAssignments]);
 
-  // Manual pause: user presses "Пауза"
+  // Manual pause: user presses "Пауза". Atomic on fresh DB state.
   const handlePauseShift = async () => {
     if (!activeShift || activeShift.is_paused) return;
-    const now = new Date().toISOString();
-    const pauseHistory = Array.isArray(activeShift.pause_history) ? activeShift.pause_history : [];
-
-    const { error } = await supabase
-      .from('shifts')
-      .update({
+    const ok = await applyPauseMutation(activeShift.id, (fresh) => {
+      if (fresh.is_paused) return null;
+      const nowIso = new Date().toISOString();
+      return {
         is_paused: true,
-        paused_at: now,
-        pause_history: [...pauseHistory, { paused_at: now, reason: 'manual' }],
-      })
-      .eq('id', activeShift.id);
-
-    if (error) {
-      toast.error('Не удалось поставить на паузу');
-      console.error(error);
-    } else {
-      toast.info('⏸ Смена на паузе');
-    }
+        paused_at: nowIso,
+        pause_history: [...fresh.pause_history, { paused_at: nowIso, reason: 'manual' }],
+      };
+    });
+    if (ok) toast.info('⏸ Смена на паузе');
+    else toast.error('Не удалось поставить на паузу');
   };
 
   // Manual resume: user presses "Возобновить" (only valid for manual pauses)
@@ -592,34 +626,27 @@ const Me = () => {
       return;
     }
 
-    const pauseHistory = Array.isArray(activeShift.pause_history) ? [...activeShift.pause_history] : [];
-    const lastIndex = pauseHistory.length - 1;
-    if (lastIndex < 0) return;
-    const lastPause = { ...pauseHistory[lastIndex] };
-
-    const now = new Date();
-    const pausedAt = new Date(activeShift.paused_at!);
-    const pausedMinutes = Math.max(0, Math.floor((now.getTime() - pausedAt.getTime()) / 60000));
-    lastPause.resumed_at = now.toISOString();
-    lastPause.duration_minutes = pausedMinutes;
-    pauseHistory[lastIndex] = lastPause;
-
-    const { error } = await supabase
-      .from('shifts')
-      .update({
+    let pausedMinutes = 0;
+    const ok = await applyPauseMutation(activeShift.id, (fresh) => {
+      if (!fresh.is_paused || !fresh.paused_at) return null;
+      const hist = [...fresh.pause_history];
+      const lastIdx = hist.length - 1;
+      const last = lastIdx >= 0 ? { ...hist[lastIdx] } : null;
+      if (!last || last.resumed_at) return null;
+      const nowD = new Date();
+      pausedMinutes = Math.max(0, Math.floor((nowD.getTime() - new Date(fresh.paused_at).getTime()) / 60000));
+      last.resumed_at = nowD.toISOString();
+      last.duration_minutes = pausedMinutes;
+      hist[lastIdx] = last;
+      return {
         is_paused: false,
         paused_at: null,
-        total_paused_minutes: (activeShift.total_paused_minutes || 0) + pausedMinutes,
-        pause_history: pauseHistory,
-      })
-      .eq('id', activeShift.id);
-
-    if (error) {
-      toast.error('Не удалось возобновить смену');
-      console.error(error);
-    } else {
-      toast.success(`▶️ Смена возобновлена. Пауза длилась ${pausedMinutes} мин`);
-    }
+        total_paused_minutes: fresh.total_paused_minutes + pausedMinutes,
+        pause_history: hist,
+      };
+    });
+    if (ok) toast.success(`▶️ Смена возобновлена. Пауза длилась ${pausedMinutes} мин`);
+    else toast.error('Не удалось возобновить смену');
   };
 
   const toggleAutoAttendance = () => {

@@ -11,6 +11,7 @@ import { DailyBreakdown } from '@/components/shifts/DailyBreakdown';
 import { calculateEarlyMinutes, formatDateInTz, getDayKeyInTz } from '@/lib/time';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { computeDayStats } from '@/lib/discipline';
+import { computeLiveWorkedMinutes, computeLivePausedMinutes } from '@/lib/shift-time';
 import { pickEffectiveTimes, type AssignmentOverride } from '@/lib/expected-times';
 
 type PeriodType = 'day' | 'week' | 'month';
@@ -37,6 +38,9 @@ interface ShiftWithDetails {
   site_timezone?: string | null;
   overtime_minutes_approved?: number;
   overtime_minutes_pending?: number;
+  // Needed to compute live worked/paused time for an OPEN shift.
+  is_paused?: boolean;
+  paused_at?: string | null;
 }
 
 interface DayStats {
@@ -57,6 +61,16 @@ const MyShifts = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [shifts, setShifts] = useState<ShiftWithDetails[]>([]);
+  // Ticks every 30s so live worked/paused counters advance while an open
+  // shift is on screen, without a manual refresh.
+  const [now, setNow] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const hasOpenShift = shifts.some(s => !s.ended_at);
+    if (!hasOpenShift) return;
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, [shifts]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -191,6 +205,8 @@ const MyShifts = () => {
           site_timezone: siteTz,
           overtime_minutes_approved: otStatus === 'approved' ? ot : 0,
           overtime_minutes_pending: otStatus === 'pending' ? ot : 0,
+          is_paused: shift.is_paused ?? false,
+          paused_at: shift.paused_at ?? null,
         };
       });
 
@@ -204,10 +220,13 @@ const MyShifts = () => {
   };
 
   const calculatePeriodStats = () => {
-    const totalWorkedMinutes = shifts.reduce((sum, shift) => sum + (shift.minutes_worked || 0), 0);
+    // Live-aware: an OPEN shift contributes elapsed-minus-paused worked time
+    // and its currently-open pause, instead of the stored 0/null it has until
+    // it's closed.
+    const totalWorkedMinutes = shifts.reduce((sum, shift) => sum + computeLiveWorkedMinutes(shift, now), 0);
     const totalLateMinutes = shifts.reduce((sum, shift) => sum + shift.minutes_late, 0);
     const totalEarlyMinutes = shifts.reduce((sum, shift) => sum + (shift.early_minutes || 0), 0);
-    const totalPausedMinutes = shifts.reduce((sum, shift) => sum + (shift.total_paused_minutes || 0), 0);
+    const totalPausedMinutes = shifts.reduce((sum, shift) => sum + computeLivePausedMinutes(shift, now), 0);
     const shiftsCount = shifts.length;
     const sitesWorked = [...new Set(shifts.map((shift) => shift.site_name))];
 
@@ -249,8 +268,10 @@ const MyShifts = () => {
           id: s.id,
           started_at: s.started_at,
           ended_at: s.ended_at,
-          minutes_worked: s.minutes_worked ?? null,
-          total_paused_minutes: s.total_paused_minutes ?? null,
+          // Feed live values so an open shift shows real worked/paused time,
+          // not the stored 0/null it carries until it's closed.
+          minutes_worked: computeLiveWorkedMinutes(s, now),
+          total_paused_minutes: computeLivePausedMinutes(s, now),
           pause_history: s.pause_events,
         })),
         expectedStart ? { start: expectedStart, timezone: tz ?? undefined } : null,
