@@ -7,7 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { getCurrentPosition, getCurrentPositionAccurate, evaluateRadius, getDistance, type RadiusEvaluation } from '@/lib/geo';
 import { startShiftTracker, type TrackerHandle, type TrackerLocation } from '@/lib/shift-tracker';
 import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz, getExpectedEndForShift } from '@/lib/time';
-import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
+import { computeDayStats, formatMinutes, type ShiftForStats } from '@/lib/discipline';
+import { computeLiveWorkedMinutes, computeLivePausedMinutes } from '@/lib/shift-time';
 import { pickEffectiveTimes, isWorkDay, type AssignmentOverride } from '@/lib/expected-times';
 import { decideAutoStart } from '@/lib/auto-attendance';
 import { registerGeofences, clearGeofences } from '@/lib/geofence';
@@ -1299,37 +1300,69 @@ const Me = () => {
               );
             })()}
             
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Начало:</span>
-                <span className="font-medium">
-                  {formatTimeInTz(
-                    new Date(activeShift.started_at),
-                    sites.find(s => s.id === activeShift.site_id)?.timezone ?? null,
+            {(() => {
+              const site = sites.find(s => s.id === activeShift.site_id);
+              const siteTz = site?.timezone ?? null;
+              const effective = site
+                ? pickEffectiveTimes(
+                    myAssignments[site.id],
+                    { expected_start: site.expected_start, expected_end: site.expected_end, timezone: siteTz },
+                  )
+                : null;
+              // Live values tick with currentTime (updates every minute).
+              const liveWorked = computeLiveWorkedMinutes(activeShift, currentTime);
+              const livePaused = computeLivePausedMinutes(activeShift, currentTime);
+              const elapsedMin = Math.max(
+                0,
+                Math.floor((currentTime.getTime() - new Date(activeShift.started_at).getTime()) / 60000),
+              );
+              return (
+                <div className="space-y-2 text-sm">
+                  {/* Plan: scheduled window for THIS worker on THIS site */}
+                  {effective && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">По графику:</span>
+                      <span className="font-medium">{effective.start}–{effective.end}</span>
+                    </div>
                   )}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Статус:</span>
-                <span className={`font-medium ${
-                  activeShift.status === 'on_time' ? 'text-accent' :
-                  activeShift.status === 'late' ? 'text-destructive' :
-                  activeShift.status === 'early' ? 'text-primary' :
-                  'text-muted-foreground'
-                }`}>
-                  {activeShift.status === 'on_time' ? 'Вовремя' :
-                   activeShift.status === 'late' ? `Опоздание ${activeShift.minutes_late} мин` :
-                   activeShift.status === 'early' ? 'Раньше времени' :
-                   'Вне объекта'}
-                </span>
-              </div>
-              {activeShift.total_paused_minutes > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Время на паузе:</span>
-                  <span className="font-medium text-yellow-600">{activeShift.total_paused_minutes} мин</span>
+                  {/* Actual start */}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Начал:</span>
+                    <span className="font-medium">{formatTimeInTz(new Date(activeShift.started_at), siteTz)}</span>
+                  </div>
+                  {/* Arrival verdict */}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Приход:</span>
+                    <span className={`font-medium ${
+                      activeShift.status === 'late' ? 'text-destructive' :
+                      activeShift.status === 'early' ? 'text-primary' :
+                      'text-accent'
+                    }`}>
+                      {activeShift.status === 'late' ? `Опоздание ${activeShift.minutes_late} мин` :
+                       activeShift.status === 'early' ? 'Пришёл раньше' :
+                       activeShift.is_overtime ? 'Сверхурочно' : 'Вовремя'}
+                    </span>
+                  </div>
+                  {/* Elapsed since start (incl. pauses) */}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Смена идёт:</span>
+                    <span className="font-medium">{formatMinutes(elapsedMin)}</span>
+                  </div>
+                  {/* Net worked time — excludes off-site / paused time. Live. */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Отработано (чисто):</span>
+                    <span className="font-semibold text-accent">{formatMinutes(liveWorked)}</span>
+                  </div>
+                  {/* Off-site / paused — NOT counted as work. Live. */}
+                  {livePaused > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Вне зоны (не в счёт):</span>
+                      <span className="font-medium text-destructive">{formatMinutes(livePaused)}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Manual pause / resume buttons */}
             {!activeShift.is_paused && (
