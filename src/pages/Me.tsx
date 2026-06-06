@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import { startShiftTracker, type TrackerHandle, type TrackerLocation } from '@/l
 import { getShiftStatus, formatTime, formatDate, formatTimeInTz, calculateMinutesWorked, getMinutesLate, isAfterExpected, getDayStartInTz, getDayKeyInTz, getExpectedEndForShift } from '@/lib/time';
 import { computeDayStats, type ShiftForStats } from '@/lib/discipline';
 import { pickEffectiveTimes, isWorkDay, type AssignmentOverride } from '@/lib/expected-times';
+import { decideAutoStart } from '@/lib/auto-attendance';
+import { registerGeofences, clearGeofences } from '@/lib/geofence';
 import { Clock, MapPin, LogOut, Play, Square, Smartphone, History, Pause, PlayCircle, CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, TrendingUp, Footprints, Repeat } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -75,6 +77,15 @@ const Me = () => {
     started_at: string;
     overtime_minutes: number;
   }>>([]);
+  // Auto-attendance: clock the worker in automatically when they enter the
+  // radius of an assigned site during their schedule. Toggle persisted in
+  // localStorage (default ON — this is the whole point of the native app).
+  const [autoAttendance, setAutoAttendance] = useState<boolean>(() => {
+    try { return localStorage.getItem('geotime.autoAttendance') !== 'off'; } catch { return true; }
+  });
+  // Guards the ambient watcher so two location events can't race into two
+  // shift rows. Reset once a shift is active / the attempt finishes.
+  const autoStartInFlight = useRef(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -455,6 +466,100 @@ const Me = () => {
     };
   }, [activeShift, sites, accuracyCapM]);
 
+  // Ambient auto-attendance: when there's NO active shift but the worker is
+  // assigned to sites, watch location and auto-clock-in the moment they enter
+  // an assigned site's radius during their schedule. On native this runs via
+  // the background-geolocation foreground service (works with screen off /
+  // app backgrounded). On web it's a visibility-aware poll while /me is open.
+  useEffect(() => {
+    if (!user || activeShift || !autoAttendance) return;
+    const assignedSites = sites.filter(s => myAssignments[s.id]);
+    if (assignedSites.length === 0) return;
+
+    const onLocation = async ({ lat, lon, accuracy }: TrackerLocation) => {
+      if (autoStartInFlight.current) return;
+      setUserLocation({ lat, lon, accuracy });
+      setGpsAccuracy(accuracy);
+      if (accuracy > 100) return; // too rough to auto-commit a shift
+
+      const now = new Date();
+      for (const site of assignedSites) {
+        const ev = evaluateRadius(lat, lon, site.lat, site.lon, site.radius_m, accuracy, accuracyCapM);
+        const assignment = myAssignments[site.id];
+        const decision = decideAutoStart({
+          verdict: ev.verdict,
+          hasActiveShift: false,
+          schedule: {
+            expected_start: assignment.expected_start ?? site.expected_start,
+            expected_end: assignment.expected_end ?? site.expected_end,
+            work_days: assignment.work_days ?? null,
+            timezone: site.timezone || null,
+          },
+          now,
+        });
+        if (!decision.shouldStart) continue;
+
+        // Won the radius check — claim the in-flight lock and re-verify in the
+        // DB that no shift is active (defends against a race with another
+        // device / the manual button).
+        autoStartInFlight.current = true;
+        try {
+          const { data: active } = await supabase
+            .from('shifts')
+            .select('id')
+            .eq('user_id', user.id)
+            .is('ended_at', null)
+            .limit(1);
+          if (active && active.length > 0) return; // already clocked in elsewhere
+          await insertShiftForSite(site, lat, lon, { isAuto: true });
+        } finally {
+          autoStartInFlight.current = false;
+        }
+        break; // one site per location event
+      }
+    };
+
+    let handle: TrackerHandle | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const h = await startShiftTracker({
+          siteName: 'GeoTime',
+          onLocation,
+          onError: (err) => console.warn('[auto-attendance]', err),
+        });
+        if (cancelled) h.stop(); else handle = h;
+      } catch (err) {
+        console.error('[auto-attendance] tracker start failed:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      handle?.stop().catch(() => undefined);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeShift, autoAttendance, sites, myAssignments, accuracyCapM]);
+
+  // Register OS-level geofences for assigned sites (native only). This is what
+  // gives the worker a system notification "Вы пришли на объект" even when the
+  // app is fully killed — the native receiver posts it without any JS running.
+  // When the app is open, the ambient watcher above does the actual auto-start.
+  // No-op on web.
+  useEffect(() => {
+    if (!user) return;
+    const assigned = sites.filter(s => myAssignments[s.id]);
+    if (!autoAttendance || assigned.length === 0) {
+      clearGeofences();
+      return;
+    }
+    registerGeofences(
+      assigned.map(s => ({ id: s.id, latitude: s.lat, longitude: s.lon, radius: s.radius_m })),
+    );
+    // Intentionally NOT clearing on unmount — geofences must persist across
+    // app teardown for the killed-state notification to fire.
+  }, [user, autoAttendance, sites, myAssignments]);
+
   // Manual pause: user presses "Пауза"
   const handlePauseShift = async () => {
     if (!activeShift || activeShift.is_paused) return;
@@ -517,6 +622,15 @@ const Me = () => {
     }
   };
 
+  const toggleAutoAttendance = () => {
+    setAutoAttendance(prev => {
+      const next = !prev;
+      try { localStorage.setItem('geotime.autoAttendance', next ? 'on' : 'off'); } catch { /* ignore */ }
+      toast.info(next ? 'Авто-отметка прихода включена' : 'Авто-отметка прихода выключена');
+      return next;
+    });
+  };
+
   const toggleWakeLock = async () => {
     try {
       if (!wakeLockEnabled && 'wakeLock' in navigator) {
@@ -533,6 +647,97 @@ const Me = () => {
     } catch (error) {
       toast.error('Не удалось активировать WakeLock');
     }
+  };
+
+  // Shared core: compute status/lateness/overtime and INSERT a shift row for
+  // the given site + position. Used by both the manual button and the ambient
+  // auto-attendance watcher. Returns the created shift, or null on failure.
+  // Assumes the caller has already verified: no active shift, GPS good enough,
+  // verdict === 'inside', and (for manual) the work-day check.
+  const insertShiftForSite = async (
+    site: Site,
+    latitude: number,
+    longitude: number,
+    opts: { isAuto: boolean },
+  ): Promise<Shift | null> => {
+    const now = new Date();
+    const siteTz = site.timezone || 'UTC';
+    const effective = pickEffectiveTimes(
+      myAssignments[site.id],
+      { expected_start: site.expected_start, expected_end: site.expected_end, timezone: siteTz },
+    );
+
+    const isAfterExpectedEnd = isAfterExpected(now, effective.end, siteTz);
+
+    // First shift of the day on this site (in site tz)? Only the first one is
+    // scored against expected_start so restarts don't re-trigger lateness.
+    const dayStartUtc = getDayStartInTz(now, siteTz).toISOString();
+    const { data: priorTodayShifts } = await supabase
+      .from('shifts')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('site_id', site.id)
+      .gte('started_at', dayStartUtc)
+      .limit(1);
+    const isFirstShiftToday = !priorTodayShifts || priorTodayShifts.length === 0;
+
+    let status: 'early' | 'on_time' | 'late' | 'offsite';
+    let minutesLate = 0;
+    let isOvertime = false;
+
+    if (isAfterExpectedEnd) {
+      isOvertime = true;
+      status = 'on_time';
+      minutesLate = 0;
+      if (!opts.isAuto) {
+        toast.info('⚡ Начата сверхурочная смена (переработка)', {
+          description: `Смена начата после ${effective.end}`,
+        });
+      }
+    } else if (isFirstShiftToday) {
+      status = getShiftStatus(now, effective.start, true, siteTz);
+      minutesLate = status === 'late' ? getMinutesLate(now, effective.start, siteTz) : 0;
+    } else {
+      status = 'on_time';
+      minutesLate = 0;
+    }
+
+    const { data, error } = await supabase
+      .from('shifts')
+      .insert({
+        user_id: user.id,
+        site_id: site.id,
+        started_at: now.toISOString(),
+        start_lat: latitude,
+        start_lon: longitude,
+        status,
+        minutes_late: minutesLate,
+        is_overtime: isOvertime,
+        auto_ended: false,
+        company_id: user.company_id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (!opts.isAuto) {
+        toast.error('Ошибка начала смены');
+      }
+      console.error('[shift insert]', error);
+      return null;
+    }
+
+    setActiveShift(data);
+    setSelectedSite(null);
+    if (opts.isAuto) {
+      const lateNote = minutesLate > 0 ? ` (опоздание ${minutesLate} мин)` : '';
+      toast.success(`📍 Авто-отметка прихода: «${site.name}»${lateNote}`, { duration: 8000 });
+    } else {
+      toast.success(`Смена начата на объекте "${site.name}"${isOvertime ? ' (переработка)' : ''}`);
+    }
+    refreshTodayShifts();
+    refreshIsFirstOfDay();
+    return data as Shift;
   };
 
   const handleStartShift = async () => {
@@ -595,88 +800,7 @@ const Me = () => {
         return;
       }
 
-      const now = new Date();
-      const siteTz = selectedSite.timezone || 'UTC';
-
-      // Resolve EFFECTIVE expected times: assignment override → site default.
-      const effective = pickEffectiveTimes(
-        myAssignments[selectedSite.id],
-        { expected_start: selectedSite.expected_start, expected_end: selectedSite.expected_end, timezone: siteTz },
-      );
-
-      // Compare against expected_end in the SITE's timezone (not the browser's),
-      // so a worker in a different tz than the site gets the same verdict as
-      // the server-side auto-end-shifts function.
-      const isAfterExpectedEnd = isAfterExpected(now, effective.end, siteTz);
-
-      // Is this the worker's FIRST shift on this site today (in the site's tz)?
-      // If yes — score against expected_start. If no — the worker has already
-      // been counted as on-time / late earlier today; restarting the shift
-      // shouldn't re-trigger lateness or duplicate the minutes_late number.
-      // The discipline "Today" block keeps showing the correct accumulated
-      // value because it computes lateness from FIRST started_at, not from
-      // the per-row minutes_late column.
-      const dayStartUtc = getDayStartInTz(now, siteTz).toISOString();
-      const { data: priorTodayShifts } = await supabase
-        .from('shifts')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('site_id', selectedSite.id)
-        .gte('started_at', dayStartUtc)
-        .limit(1);
-      const isFirstShiftToday = !priorTodayShifts || priorTodayShifts.length === 0;
-
-      let status: 'early' | 'on_time' | 'late' | 'offsite';
-      let minutesLate = 0;
-      let isOvertime = false;
-
-      if (isAfterExpectedEnd) {
-        // After expected_end - this is overtime
-        isOvertime = true;
-        status = 'on_time';
-        minutesLate = 0;
-
-        toast.info('⚡ Начата сверхурочная смена (переработка)', {
-          description: `Смена начата после ${effective.end}`,
-        });
-      } else if (isFirstShiftToday) {
-        // First shift of the day on this site → score against expected_start.
-        status = getShiftStatus(now, effective.start, true, siteTz);
-        minutesLate = status === 'late' ? getMinutesLate(now, effective.start, siteTz) : 0;
-      } else {
-        // Repeat shift within working hours — lateness was already recorded
-        // on the first shift of the day. This restart is a "continuation".
-        status = 'on_time';
-        minutesLate = 0;
-      }
-
-      const { data, error } = await supabase
-        .from('shifts')
-        .insert({
-          user_id: user.id,
-          site_id: selectedSite.id,
-          started_at: now.toISOString(),
-          start_lat: latitude,
-          start_lon: longitude,
-          status,
-          minutes_late: minutesLate,
-          is_overtime: isOvertime,
-          auto_ended: false,
-          company_id: user.company_id,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        toast.error('Ошибка начала смены');
-        console.error(error);
-      } else {
-        setActiveShift(data);
-        setSelectedSite(null);
-        toast.success(`Смена начата на объекте "${selectedSite.name}"${isOvertime ? ' (переработка)' : ''}`);
-        refreshTodayShifts();
-        refreshIsFirstOfDay();
-      }
+      await insertShiftForSite(selectedSite, latitude, longitude, { isAuto: false });
     } catch (error) {
       toast.error('Не удалось получить геолокацию');
       console.error(error);
@@ -1307,6 +1431,33 @@ const Me = () => {
             )}
           </Card>
         )}
+
+        {/* Auto-attendance toggle */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <MapPin className="w-5 h-5 text-primary" />
+              <div>
+                <h3 className="font-medium">Авто-отметка прихода</h3>
+                <p className="text-xs text-muted-foreground">
+                  Смена начнётся сама, как только вы войдёте в радиус своего объекта в рабочее время
+                </p>
+              </div>
+            </div>
+            <Button
+              variant={autoAttendance ? 'default' : 'outline'}
+              size="sm"
+              onClick={toggleAutoAttendance}
+            >
+              {autoAttendance ? 'Включено' : 'Выключено'}
+            </Button>
+          </div>
+          {autoAttendance && !activeShift && (
+            <div className="mt-3 text-xs text-muted-foreground bg-primary/5 border border-primary/15 rounded-md px-3 py-2">
+              📍 Слежение активно. Подойдите к объекту — приход отметится автоматически.
+            </div>
+          )}
+        </Card>
 
         {/* WakeLock Toggle */}
         <Card className="p-6">
