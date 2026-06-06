@@ -19,6 +19,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # GITHUB_TOKEN needs contents:write to publish the rolling release.
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
